@@ -110,9 +110,12 @@ async def link_generator(client: Client, message: Message):
         await message.reply_text(caption, parse_mode="html")
 
 
+
 async def search_movie_in_db(client, movie_name):
-    """Searches for a movie in the DB Channel using db.get_session."""
-    async with db.get_session() as session:
+    """Search for a movie in the DB Channel using db.get_session."""
+    user_id = client.me.id  # Use the bot's user ID
+
+    async with db.get_session(user_id) as session:
         async for msg in session.get_chat_history(client.db_channel.id, limit=100):
             if movie_name.lower() in msg.text.lower():
                 # Extract necessary details from the message
