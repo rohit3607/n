@@ -113,13 +113,9 @@ async def link_generator(client: Client, message: Message):
 
 async def search_movie_in_db(client, movie_name):
     """Search for a movie in the DB Channel using Pyrogram's search_messages()."""
-    results = await client.search_messages(client.db_channel.id, query=movie_name, limit=10)
-    
-    if not results:
-        return []
-
     movies = []
-    for msg in results:
+
+    async for msg in client.search_messages(client.db_channel.id, query=movie_name, limit=10):
         movies.append({
             "msg_id": msg.message_id,
             "title": "Extracted Title",
@@ -132,7 +128,7 @@ async def search_movie_in_db(client, movie_name):
             }
         })
 
-    return movies
+    return movies  # Return the list of found movies
 
 def extract_qualities_from_message(message):
     """Extracts qualities (e.g., 480p, 720p, 1080p) and their message IDs from the message."""
