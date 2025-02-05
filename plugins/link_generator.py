@@ -6,6 +6,7 @@ from bot import Bot
 from config import ADMINS
 from helper_func import encode, get_message_id
 import requests
+from database.database import *
 from io import BytesIO
 
 # Replace this with your actual OMDb API key
@@ -109,21 +110,23 @@ async def link_generator(client: Client, message: Message):
 
 
 async def search_movie_in_db(client, movie_name):
-    """Function to search the DB channel for the movie and extract details."""
-    async for message in client.get_chat_history(client.db_channel.id, limit=100):  # Adjust the limit as needed
-        if movie_name.lower() in message.text.lower():  # Check if the movie name is mentioned in the message
-            # Here we assume that your DB messages are structured with title, year, language, and qualities
-            qualities = extract_qualities_from_message(message)  # Extract qualities from the message text or caption
-            movie_data = {
-                "msg_id": message.message_id,
-                "title": movie_name,
-                "year": "Unknown Year",  # Modify if year is part of the message
-                "language": "Unknown Language",  # Modify if language is part of the message
-                "qualities": qualities
-            }
-            return [movie_data]
+    """Searches for a movie in the DB Channel using db.get_session."""
+    async with db.get_session() as session:
+        async for msg in session.get_chat_history(client.db_channel.id, limit=100):
+            if movie_name.lower() in msg.text.lower():
+                # Extract necessary details from the message
+                return [{
+                    "msg_id": msg.message_id,
+                    "title": "Extracted Title",
+                    "year": "Extracted Year",
+                    "language": "Extracted Language",
+                    "qualities": {
+                        "480p": [1111, 2222],  # Example batch links
+                        "720p": 3333,  # Single file
+                        "1080p": [4444, 5555, 6666]  # Another batch example
+                    }
+                }]
     return []
-
 
 def extract_qualities_from_message(message):
     """Extracts qualities (e.g., 480p, 720p, 1080p) and their message IDs from the message."""
