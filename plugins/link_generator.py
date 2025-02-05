@@ -49,6 +49,7 @@ async def batch(client: Client, message: Message):
 
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client: Client, message: Message):
+    id = message.from_user.id
     try:
         movie_query = await client.ask(
             text="Send the movie name to search in the DB Channel:",
