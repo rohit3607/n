@@ -26,9 +26,9 @@ TUT_VID = f"{TUT_VID}"
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
     id = message.from_user.id
-    if not await present_user(id):
+    if not await db.present_user(id):
         try:
-            await add_user(id)
+            await db.add_user(id)
         except:
             pass
 
