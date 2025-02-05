@@ -112,24 +112,27 @@ async def link_generator(client: Client, message: Message):
 
 
 async def search_movie_in_db(client, movie_name):
-    """Search for a movie in the DB Channel using db.get_session()."""
-    user_id = client.me.id  # Use the bot's user ID
+    """Search for a movie in the DB Channel using Pyrogram's search_messages()."""
+    results = await client.search_messages(client.db_channel.id, query=movie_name, limit=10)
+    
+    if not results:
+        return []
 
-    session = await db.get_session(user_id)  # Ensure we await this function
-    async for msg in session.get_chat_history(client.db_channel.id, limit=100):
-        if movie_name.lower() in msg.text.lower():
-            return [{
-                "msg_id": msg.message_id,
-                "title": "Extracted Title",
-                "year": "Extracted Year",
-                "language": "Extracted Language",
-                "qualities": {
-                    "480p": [1111, 2222],  # Example batch links
-                    "720p": 3333,  # Single file
-                    "1080p": [4444, 5555, 6666]  # Another batch example
-                }
-            }]
-    return []
+    movies = []
+    for msg in results:
+        movies.append({
+            "msg_id": msg.message_id,
+            "title": "Extracted Title",
+            "year": "Extracted Year",
+            "language": "Extracted Language",
+            "qualities": {
+                "480p": [1111, 2222],  # Example batch links
+                "720p": 3333,  # Single file
+                "1080p": [4444, 5555, 6666]  # Another batch example
+            }
+        })
+
+    return movies
 
 def extract_qualities_from_message(message):
     """Extracts qualities (e.g., 480p, 720p, 1080p) and their message IDs from the message."""
