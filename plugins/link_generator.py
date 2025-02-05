@@ -9,7 +9,7 @@ import requests
 from io import BytesIO
 
 # Replace this with your actual OMDb API key
-OMDB_API_KEY = "your_omdb_api_key"
+OMDB_API_KEY = "601c408a"
 
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('batch'))
 async def batch(client: Client, message: Message):
