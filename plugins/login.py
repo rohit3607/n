@@ -11,7 +11,7 @@ from pyrogram.errors import (
     SessionPasswordNeeded,
     PasswordHashInvalid
 )
-from config import API_ID, API_HASH, ADMINS
+from config import APP_ID, API_HASH, ADMINS
 from database.database import *
 
 SESSION_STRING_SIZE = 351
@@ -35,7 +35,7 @@ async def main(bot: Client, message: Message):
     if phone_number_msg.text=='/cancel':
         return await phone_number_msg.reply('<b>process cancelled !</b>')
     phone_number = phone_number_msg.text
-    client = Client(":memory:", API_ID, API_HASH)
+    client = Client(":memory:", APP_ID, API_HASH)
     await client.connect()
     await phone_number_msg.reply("Sending OTP...")
     try:
@@ -72,7 +72,7 @@ async def main(bot: Client, message: Message):
     try:
         user_data = await db.get_session(message.from_user.id)
         if user_data is None:
-            uclient = Client(":memory:", session_string=string_session, api_id=API_ID, api_hash=API_HASH)
+            uclient = Client(":memory:", session_string=string_session, api_id=APP_ID, api_hash=API_HASH)
             await uclient.connect()
             await db.set_session(message.from_user.id, session=string_session)
     except Exception as e:
