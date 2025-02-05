@@ -46,8 +46,6 @@ async def batch(client: Client, message: Message):
 
 
 
-
-
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client: Client, message: Message):
     try:
@@ -72,7 +70,7 @@ async def link_generator(client: Client, message: Message):
     language = movie_data.get('language', 'Unknown Language')
     qualities = movie_data.get('qualities', {})
 
-    # Fetch movie poster and details
+    # Fetch movie poster and details from IMDb
     poster_url, imdb_rating, genre, plot = await get_movie_poster(movie_title)
 
     links = []
@@ -112,19 +110,30 @@ async def link_generator(client: Client, message: Message):
 
 async def search_movie_in_db(client, movie_name):
     """Function to search the DB channel for the movie and extract details."""
-    # Implement logic to search DB Channel messages and extract relevant movie details
-    # Example return structure:
-    return [{
-        "msg_id": 1234,
-        "title": "Guardians of the Galaxy Vol. 2",
-        "year": "2017",
-        "language": "English",
-        "qualities": {
-            "480p": [1111, 2222],  # Example of batch links
-            "720p": 3333,  # Example of a single file
-            "1080p": [4444, 5555, 6666]  # Another batch example
-        }
-    }]
+    async for message in client.get_chat_history(client.db_channel.id, limit=100):  # Adjust the limit as needed
+        if movie_name.lower() in message.text.lower():  # Check if the movie name is mentioned in the message
+            # Here we assume that your DB messages are structured with title, year, language, and qualities
+            qualities = extract_qualities_from_message(message)  # Extract qualities from the message text or caption
+            movie_data = {
+                "msg_id": message.message_id,
+                "title": movie_name,
+                "year": "Unknown Year",  # Modify if year is part of the message
+                "language": "Unknown Language",  # Modify if language is part of the message
+                "qualities": qualities
+            }
+            return [movie_data]
+    return []
+
+
+def extract_qualities_from_message(message):
+    """Extracts qualities (e.g., 480p, 720p, 1080p) and their message IDs from the message."""
+    qualities = {}
+    # Example: assume qualities are included in message as '480p', '720p', etc.
+    for quality in ["480p", "720p", "1080p"]:
+        if quality in message.text:
+            msg_ids = [message.message_id]  # Here we assume that each quality is linked to this message
+            qualities[quality] = msg_ids  # Assign message ID for each quality (adjust if multiple links)
+    return qualities
 
 
 async def get_movie_poster(movie_name):
