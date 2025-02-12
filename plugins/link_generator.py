@@ -51,10 +51,6 @@ import imdb
 import re
 import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import (
-    InlineKeyboardMarkup, InlineKeyboardButton, 
-    CallbackQuery, InputMediaPhoto
-)
 
 # IMDb Function - Fetches movie details
 async def get_movie_details(movie_name):
@@ -76,15 +72,7 @@ async def get_movie_details(movie_name):
         "id": movie_id
     }
 
-# Extract formatted movie name
-async def movie_name_format(file_name):
-    return re.sub(r"\.\w+$", "", file_name).replace(".", " ").strip()
-
-# Upscale image (Placeholder function)
-async def upscale_image(image_url):
-    return image_url  # Replace with an actual image upscaling function if needed
-
-# `/genlink` Command - Fetch IMDb details and ask customization questions
+# `/genlink` Command - Fetch IMDb details and ask customization questions manually
 @Bot.on_message(filters.private & filters.command('genlink'))
 async def link_generator(client, message):
     while True:
@@ -108,83 +96,53 @@ async def link_generator(client, message):
 
         movie_title = imdb_data.get("title")
         movie_year = imdb_data.get("year")
-        movie_poster = await upscale_image(imdb_data.get("poster"))
-        imdb_id = imdb_data.get("id")
+        movie_poster = imdb_data.get("poster")  # Automatically fetch IMDb poster
         movie_plot = imdb_data.get("plot", "No description available.")
 
         # Shorten plot to first sentence
         short_plot = movie_plot.split(". ")[0] + "." if "." in movie_plot else movie_plot
 
-        # Ask for poster change
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Yes", callback_data=f"change_{movie_title}")],
-            [InlineKeyboardButton("❌ No", callback_data=f"select_language_{movie_title}")]
-        ])
-
+        # **Automatically replace poster with IMDb poster**
         await message.reply_photo(
             photo=movie_poster, 
-            caption=f"**{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}\n\nDo you want to change the poster?", 
-            reply_markup=reply_markup,
+            caption=f"**{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}",
             quote=True
         )
-        break
 
-# Handle callback queries for customization
-@Bot.on_callback_query()
-async def cb_handler(client: Bot, query: CallbackQuery):
-    data = query.data.split("_")
-    action, movie_title = data[0], "_".join(data[1:])  
+        # Ask for language
+        language_query = await client.ask(
+            text="Enter the language (e.g., Hindi, English, Tamil, Telugu):",
+            chat_id=message.from_user.id,
+            filters=filters.text,
+            timeout=60
+        )
+        movie_language = language_query.text.strip()
 
-    if action == "change":
-        imdb_data = await get_movie_details(movie_title.replace("_", " "))
-        if not imdb_data:
-            await query.message.edit_text("❌ Could not fetch IMDb details. Try again.")
-            return
+        # Ask for quality
+        quality_query = await client.ask(
+            text="Enter the quality (e.g., HDRip, WEB-DL, 1080p, 720p):",
+            chat_id=message.from_user.id,
+            filters=filters.text,
+            timeout=60
+        )
+        movie_quality = quality_query.text.strip()
 
-        poster_url = await upscale_image(imdb_data["poster"])
-
-        await query.message.edit_media(
-            media=InputMediaPhoto(poster_url),
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🇮🇳 Hindi", callback_data=f"set_language_Hindi_{movie_title}"),
-                 InlineKeyboardButton("🇬🇧 English", callback_data=f"set_language_English_{movie_title}")],
-                [InlineKeyboardButton("Next ➡️", callback_data=f"select_quality_{movie_title}")]
-            ])
+        # Final confirmation
+        await message.reply(
+            f"🎬 **Movie:** {movie_title} ({movie_year})\n"
+            f"📌 **Language:** {movie_language}\n"
+            f"📽 **Quality:** {movie_quality}\n\n"
+            f"Generating file link... Please wait."
         )
 
-    elif action.startswith("set_language"):
-        language = action.split("_")[2]
-
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔹 HDRip", callback_data=f"set_quality_HDRip_{movie_title}"),
-             InlineKeyboardButton("🔹 WEB-DL", callback_data=f"set_quality_WEB-DL_{movie_title}")],
-            [InlineKeyboardButton("🔹 1080p", callback_data=f"set_quality_1080p_{movie_title}"),
-             InlineKeyboardButton("🔹 720p", callback_data=f"set_quality_720p_{movie_title}")],
-            [InlineKeyboardButton("Next ➡️", callback_data=f"generate_link_{movie_title}")]
-        ])
-
-        await query.message.edit_text(f"✅ Language set to: {language}\n\nNow, select the quality:", reply_markup=reply_markup)
-
-    elif action.startswith("set_quality"):
-        quality = action.split("_")[2]
-
-        reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_generate_{movie_title}")],
-            [InlineKeyboardButton("❌ No", callback_data="cancel")]
-        ])
-
-        await query.message.edit_text(f"✅ Quality set to: {quality}\n\nDo you want to generate the file link?", reply_markup=reply_markup)
-
-    elif action == "confirm_generate":
-        movie_name = movie_title.replace("-", " ")
-        db_results = await db.get_session(movie_name)
-
+        # Fetch download links from DB
+        db_results = await db.get_session(movie_title)
         if not db_results:
-            await query.message.edit_text("🚫 No download links available in the database.")
+            await message.reply("🚫 No download links available in the database.")
             return
 
         # Generate file links
-        caption = f"**{movie_name}**\n"
+        caption = f"**{movie_title} ({movie_year})**\n📌 **Language:** {movie_language}\n📽 **Quality:** {movie_quality}\n\n"
         links = {}
 
         for msg in db_results:
@@ -201,10 +159,8 @@ async def cb_handler(client: Bot, query: CallbackQuery):
         for quality, link_list in links.items():
             caption += f"📥 **{quality}**: [Download]({link_list[0]})\n"
 
-        await query.message.edit_text(caption, disable_web_page_preview=True)
-
-    elif action == "cancel":
-        await query.message.edit_text("❌ Operation cancelled.")
+        await message.reply(caption, disable_web_page_preview=True)
+        break
 
 # Extract quality from caption
 async def check_qualities(text, qualities):
