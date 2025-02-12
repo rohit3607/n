@@ -5,94 +5,64 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from database.database import *
 
 @Bot.on_callback_query()
-async def cb_handler(client, query: CallbackQuery):
+async def cb_handler(client: Bot, query: CallbackQuery):
     data = query.data
     print(f"Callback Data Received: {data}")  # Debugging
 
-    # Respond to keep Telegram from showing "button not working"
+    # Always answer the query to prevent "button not working"
     await query.answer()
 
-    if data == "help":
-        await query.message.edit_text(
-            text=HELP_TXT.format(first=query.from_user.first_name),
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton('ʜᴏᴍᴇ', callback_data='start'),
-                  InlineKeyboardButton("ᴄʟᴏꜱᴇ", callback_data='close')]]
-            )
-        )
-
-    elif data == "about":
-        await query.message.edit_text(
-            text=ABOUT_TXT.format(first=query.from_user.first_name),
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup(
-                [[InlineKeyboardButton('ʜᴏᴍᴇ', callback_data='start'),
-                  InlineKeyboardButton('ᴄʟᴏꜱᴇ', callback_data='close')]]
-            )
-        )
-
-    elif data == "start":
-        await query.message.edit_text(
-            text=START_MSG.format(first=query.from_user.first_name),
-            disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("ʜᴇʟᴘ", callback_data='help'),
-                 InlineKeyboardButton("ᴀʙᴏᴜᴛ", callback_data='about')]
-            ])
-        )
-
-    elif data == "close":
-        await query.message.delete()
-        try:
-            await query.message.reply_to_message.delete()
-        except:
-            pass
-
-    # -------------------------------
-    # Callbacks for Movie Handling
-    # -------------------------------
     data_parts = data.split("_")
     action = data_parts[0]
     movie_title = "_".join(data_parts[1:]) if len(data_parts) > 1 else None
 
-    if action == "changeposter":
+    # ✅ Change Poster
+    if action == "change":
         await query.message.edit_text("🔄 Send a new poster image.")
 
-        # Ask for a new poster from the user
-        new_poster = await client.ask(query.message.chat.id, filters=filters.photo, timeout=60)
+        try:
+            new_poster = await client.ask(
+                query.message.chat.id, filters=filters.photo, timeout=30
+            )
+        except asyncio.TimeoutError:
+            await query.message.edit_text("⏳ No image received. Keeping the original poster.")
+            return
+
         poster_url = new_poster.photo.file_id if new_poster.photo else await upscale_image(await get_movie_details(movie_title)["poster"])
 
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🇮🇳 Hindi", callback_data=f"setlanguage_Hindi_{movie_title}"),
-             InlineKeyboardButton("🇬🇧 English", callback_data=f"setlanguage_English_{movie_title}")],
-            [InlineKeyboardButton("➡️ Next", callback_data=f"selectquality_{movie_title}")]
+            [InlineKeyboardButton("🇮🇳 Hindi", callback_data=f"set_language_Hindi_{movie_title}"),
+             InlineKeyboardButton("🇬🇧 English", callback_data=f"set_language_English_{movie_title}")],
+            [InlineKeyboardButton("➡️ Next", callback_data=f"select_quality_{movie_title}")]
         ])
 
         await query.message.reply_photo(photo=poster_url, caption="✅ Poster updated!\n\nSelect the language:", reply_markup=reply_markup)
 
-    elif action == "setlanguage":
-        language = data_parts[1]
+    # ✅ Set Language
+    elif action == "set":
+        language = data_parts[2]
 
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔹 HDRip", callback_data=f"setquality_HDRip_{movie_title}"),
-             InlineKeyboardButton("🔹 WEB-DL", callback_data=f"setquality_WEB-DL_{movie_title}")],
-            [InlineKeyboardButton("➡️ Next", callback_data=f"confirmgenerate_{movie_title}")]
+            [InlineKeyboardButton("🔹 HDRip", callback_data=f"set_quality_HDRip_{movie_title}"),
+             InlineKeyboardButton("🔹 WEB-DL", callback_data=f"set_quality_WEB-DL_{movie_title}")],
+            [InlineKeyboardButton("➡️ Next", callback_data=f"confirm_generate_{movie_title}")]
         ])
 
         await query.message.edit_text(f"✅ Language set to: {language}\n\nNow, select the quality:", reply_markup=reply_markup)
 
-    elif action == "setquality":
-        quality = data_parts[1]
+    # ✅ Set Quality
+    elif action == "set_quality":
+        quality = data_parts[2]
 
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ Yes", callback_data=f"confirmgenerate_{movie_title}")],
+            [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_generate_{movie_title}")],
             [InlineKeyboardButton("❌ No", callback_data="cancel")]
         ])
 
         await query.message.edit_text(f"✅ Quality set to: {quality}\n\nDo you want to generate the file link?", reply_markup=reply_markup)
 
-    elif action == "confirmgenerate":
+    # ✅ Confirm Generate Link
+    elif action == "confirm_generate":
         movie_name = movie_title.replace("-", " ")
         db_results = await db.get_session(movie_name)
 
@@ -120,5 +90,6 @@ async def cb_handler(client, query: CallbackQuery):
 
         await query.message.edit_text(caption, disable_web_page_preview=True)
 
+    # ❌ Cancel
     elif action == "cancel":
         await query.message.edit_text("❌ Operation cancelled.")
