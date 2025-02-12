@@ -46,9 +46,35 @@ async def batch(client: Client, message: Message):
     reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link}')]])
     await second_message.reply_text(f"<b>Here is your link</b>\n\n{link}", quote=True, reply_markup=reply_markup)
 
+
 import imdb
 import asyncio
+import requests
+from io import BytesIO
+from PIL import Image
 from pyrogram import Client, filters
+
+# Function to upscale image
+async def upscale_image(image_url):
+    try:
+        response = requests.get(image_url, stream=True)
+        response.raise_for_status()
+
+        image = Image.open(BytesIO(response.content))
+
+        # Resize image using PIL (LANCZOS for best quality)
+        width, height = image.size
+        image = image.resize((width * 2, height * 2), Image.LANCZOS)
+
+        # Save upscaled image to memory
+        img_byte_arr = BytesIO()
+        image.save(img_byte_arr, format="JPEG", quality=95)
+        img_byte_arr.seek(0)
+
+        return img_byte_arr
+    except Exception as e:
+        print(f"Error upscaling image: {e}")
+        return None
 
 # IMDb Function - Fetches multiple posters
 async def get_movie_details(movie_name):
@@ -113,10 +139,12 @@ async def link_generator(client, message):
             await message.reply("⚠️ No poster found for this movie.")
             return
 
-        # Step 2: Send first poster
-        movie_poster = imdb_posters[0]
+        # Step 2: Send first upscaled poster
+        movie_poster_url = imdb_posters[0]
+        upscaled_poster = await upscale_image(movie_poster_url) or movie_poster_url
+
         await message.reply_photo(
-            photo=movie_poster,
+            photo=upscaled_poster,
             caption=f"🎬 **{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}\n\nType `yes` to keep this poster, or `no` to change it.",
             quote=True
         )
@@ -142,11 +170,12 @@ async def link_generator(client, message):
                     await message.reply("❌ No more posters available.")
                     break
 
-                new_poster = imdb_posters[0]
-                movie_poster = new_poster  # Update to new poster
+                # Fetch another poster with a matching name
+                new_poster_url = imdb_posters[0]
+                upscaled_poster = await upscale_image(new_poster_url) or new_poster_url
 
                 await message.reply_photo(
-                    photo=new_poster,
+                    photo=upscaled_poster,
                     caption="✅ **Poster updated!**\n\nType `yes` to keep this, or `no` to change again."
                 )
 
@@ -185,25 +214,7 @@ async def link_generator(client, message):
             await message.reply("❌ Invalid quality. Using default: `720p`.")
             quality = "720p"
 
-        # Step 6: Confirm and generate file link
-        try:
-            confirm_msg = await client.ask(
-                text=f"🔹 **Movie:** {movie_title} ({movie_year})\n"
-                     f"🔹 **Language:** {language}\n"
-                     f"🔹 **Quality:** {quality}\n\n"
-                     "✅ Type `confirm` to generate the file link, or `cancel` to stop.",
-                chat_id=message.from_user.id,
-                filters=filters.text,
-                timeout=60
-            )
-        except:
-            return
-
-        if confirm_msg.text.lower() != "confirm":
-            await message.reply("❌ Operation cancelled.")
-            return
-
-        # Step 7: Fetch movie from database and generate links
+        # Step 6: Fetch movie from database and generate links
         db_results = await db.get_session(movie_title)
 
         # Generate links or display "not available" message
@@ -231,10 +242,11 @@ async def link_generator(client, message):
             for file_quality, link_list in links.items():
                 caption += f"📥 **{file_quality}**: {link_list[0]}\n"
 
-        # Step 8: Send poster with final caption
+        # Step 7: Send final poster with caption
         await message.reply_photo(
-            photo=movie_poster,
-            caption=caption)
+            photo=upscaled_poster,
+            caption=caption
+        )
         break
 
 # Extract quality from caption
