@@ -51,9 +51,10 @@ import imdb
 import re
 import asyncio
 from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# IMDb Function - Fetches movie details
-async def get_movie_details(movie_name):
+# IMDb Function - Fetch movie details and alternate posters
+async def get_movie_details(movie_name, poster_index=0):
     ia = imdb.IMDb()
     movies = ia.search_movie(movie_name)
 
@@ -64,16 +65,22 @@ async def get_movie_details(movie_name):
     movie_id = movie.movieID
     movie_data = ia.get_movie(movie_id)
 
+    posters = movie_data.get("full-size cover url", [])
+    
+    if isinstance(posters, str):  # If only one poster exists
+        posters = [posters]
+
     return {
         "title": movie_data.get("title"),
         "year": movie_data.get("year"),
-        "poster": movie_data.get("full-size cover url", ""),  # High-resolution poster
+        "poster": posters[poster_index] if len(posters) > poster_index else posters[0] if posters else "",
         "plot": movie_data.get("plot outline", "No description available."),
-        "id": movie_id
+        "id": movie_id,
+        "total_posters": len(posters)
     }
 
-# `/genlink` Command - Fetch IMDb details and ask customization questions manually
-@Bot.on_message(filters.private & filters.command('genlink'))
+# `/genlink` Command - Fetch IMDb details and ask about the poster
+@Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client, message):
     while True:
         try:
@@ -96,75 +103,54 @@ async def link_generator(client, message):
 
         movie_title = imdb_data.get("title")
         movie_year = imdb_data.get("year")
-        movie_poster = imdb_data.get("poster")  # Automatically fetch IMDb poster
+        movie_poster = imdb_data.get("poster")
+        imdb_id = imdb_data.get("id")
         movie_plot = imdb_data.get("plot", "No description available.")
+        total_posters = imdb_data.get("total_posters")
 
         # Shorten plot to first sentence
         short_plot = movie_plot.split(". ")[0] + "." if "." in movie_plot else movie_plot
 
-        # **Automatically replace poster with IMDb poster**
+        # Ask if the user wants to change the poster
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Yes", callback_data=f"change_poster_{movie_title}_1") if total_posters > 1 else None],
+            [InlineKeyboardButton("❌ No", callback_data=f"select_language_{movie_title}")]
+        ])
+
         await message.reply_photo(
             photo=movie_poster, 
-            caption=f"**{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}",
+            caption=f"{movie_title} ({movie_year})\n➤ Details: {short_plot}\n\nDo you want to change the poster?", 
+            reply_markup=reply_markup,
             quote=True
         )
-
-        # Ask for language
-        language_query = await client.ask(
-            text="Enter the language (e.g., Hindi, English, Tamil, Telugu):",
-            chat_id=message.from_user.id,
-            filters=filters.text,
-            timeout=60
-        )
-        movie_language = language_query.text.strip()
-
-        # Ask for quality
-        quality_query = await client.ask(
-            text="Enter the quality (e.g., HDRip, WEB-DL, 1080p, 720p):",
-            chat_id=message.from_user.id,
-            filters=filters.text,
-            timeout=60
-        )
-        movie_quality = quality_query.text.strip()
-
-        # Final confirmation
-        await message.reply(
-            f"🎬 **Movie:** {movie_title} ({movie_year})\n"
-            f"📌 **Language:** {movie_language}\n"
-            f"📽 **Quality:** {movie_quality}\n\n"
-            f"Generating file link... Please wait."
-        )
-
-        # Fetch download links from DB
-        db_results = await db.get_session(movie_title)
-        if not db_results:
-            await message.reply("🚫 No download links available in the database.")
-            return
-
-        # Generate file links
-        caption = f"**{movie_title} ({movie_year})**\n📌 **Language:** {movie_language}\n📽 **Quality:** {movie_quality}\n\n"
-        links = {}
-
-        for msg in db_results:
-            quality = await check_qualities(msg.text, ["HDRip", "WEB-DL", "1080p", "720p"])
-            msg_id = msg.message_id
-            encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
-            link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
-
-            if quality in links:
-                links[quality].append(link)
-            else:
-                links[quality] = [link]
-
-        for quality, link_list in links.items():
-            caption += f"📥 **{quality}**: [Download]({link_list[0]})\n"
-
-        await message.reply(caption, disable_web_page_preview=True)
         break
 
-# Extract quality from caption
-async def check_qualities(text, qualities):
-    for quality in qualities:
-        if quality.lower() in text.lower():
-            return quality
-    return None
+# Handle poster change
+@Bot.on_callback_query()
+async def cb_handler(client, query):
+    data = query.data.split("_")
+    action, movie_title, index = data[0], "_".join(data[1:-1]), int(data[-1])
+
+    if action == "change_poster":
+        imdb_data = await get_movie_details(movie_title, poster_index=index)
+
+        if not imdb_data or index >= imdb_data["total_posters"]:
+            await query.message.edit_text("❌ No more posters available.")
+            return
+
+        movie_poster = imdb_data["poster"]
+        total_posters = imdb_data["total_posters"]
+
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Yes", callback_data=f"change_poster_{movie_title}_{index+1}") if index + 1 < total_posters else None],
+            [InlineKeyboardButton("❌ No", callback_data=f"select_language_{movie_title}")]
+        ])
+
+        await query.message.reply_photo(
+            photo=movie_poster,
+            caption=f"✅ Poster updated!\n\nDo you want to change it again?",
+            reply_markup=reply_markup
+        )
+
+    elif action == "select_language":
+        await query.message.edit_text("✅ Now select the language.")
