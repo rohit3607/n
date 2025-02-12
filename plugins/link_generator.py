@@ -47,20 +47,14 @@ async def batch(client: Client, message: Message):
     await second_message.reply_text(f"<b>Here is your link</b>\n\n{link}", quote=True, reply_markup=reply_markup)
 
 
-
-
-
-
 import imdb
 import re
 import asyncio
-import imdb
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
 # Processed movies to avoid duplicates
 processed_movies = set()
-
 
 # IMDb Function - Fetches movie details
 async def get_movie_details(movie_name):
@@ -82,25 +76,15 @@ async def get_movie_details(movie_name):
         "id": movie_id
     }
 
-# Extract quality from caption
-async def check_qualities(text, qualities):
-    for quality in qualities:
-        if quality.lower() in text.lower():
-            return quality
-    return None
-
 # Extract formatted movie name
 async def movie_name_format(file_name):
     return re.sub(r"\.\w+$", "", file_name).replace(".", " ").strip()
 
+# Upscale image (Placeholder function)
+async def upscale_image(image_url):
+    return image_url  # Replace with an actual image upscaling function if needed
 
-
-# Handle poster replacement
-async def replace_poster(movie_name):
-    new_poster = await get_imdb(movie_name)
-    return new_poster
-
-# `/genlink` Command - Fetch IMDb details and generate file links
+# `/genlink` Command - Fetch IMDb details and ask customization questions
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client, message):
     while True:
@@ -124,124 +108,105 @@ async def link_generator(client, message):
 
         movie_title = imdb_data.get("title")
         movie_year = imdb_data.get("year")
-        movie_poster = imdb_data.get("poster")
+        movie_poster = await upscale_image(imdb_data.get("poster"))
         imdb_id = imdb_data.get("id")
         movie_plot = imdb_data.get("plot", "No description available.")
 
         # Shorten plot to first sentence
         short_plot = movie_plot.split(". ")[0] + "." if "." in movie_plot else movie_plot
 
-        # Search for the movie in the DB Channel
-        db_results = await db.get_session(movie_title)
-
-        # Generate caption
-        caption = f"**{movie_title} ({movie_year})**\n"
-        caption += f"➤ **Details:** {short_plot}\n\n"
-
-        # If files are found, generate download links
-        if db_results:
-            links = {}
-            for msg in db_results:
-                quality = await check_qualities(msg.text, ["HDRip", "WEB-DL", "1080p", "720p"])
-                msg_id = msg.message_id
-                encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
-                link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
-
-                if quality in links:
-                    links[quality].append(link)
-                else:
-                    links[quality] = [link]
-
-            for quality, link_list in links.items():
-                caption += f"📥 **{quality}**: [Download]({link_list[0]})\n"
-
-        else:
-            caption += "🚫 No download links available in the database.\n"
-
-        # Buttons for customization
+        # Ask for poster change
         reply_markup = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔄 Change Quality", callback_data=f"change_quality_{movie_title}")],
-            [InlineKeyboardButton("🌍 Change Language", callback_data=f"change_language_{movie_title}")],
-            [InlineKeyboardButton("🖼 Replace Poster", callback_data=f"replace_poster_{movie_title}")]
+            [InlineKeyboardButton("✅ Yes", callback_data=f"change_poster_{movie_title}")],
+            [InlineKeyboardButton("❌ No", callback_data=f"select_language_{movie_title}")]
         ])
-
-        # Send movie details with poster
-        await message.reply_photo(photo=movie_poster, caption=caption, reply_markup=reply_markup, quote=True)
+        
+        await message.reply_photo(
+            photo=movie_poster, 
+            caption=f"**{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}\n\nDo you want to change the poster?", 
+            reply_markup=reply_markup,
+            quote=True
+        )
         break
 
-# Send movie updates with high-quality poster & customization options
-async def send_movie_updates(bot, file_name, caption, file_id):
-    try:
-        # Extract year and season
-        year_match = re.search(r"\b(19|20)\d{2}\b", caption)
-        year = year_match.group(0) if year_match else None      
+# Handle callback queries for customization
+@Bot.on_callback_query()
+async def cb_handler(client: Bot, query: CallbackQuery):
+    data = query.data.split("_")
+    action, movie_title = data[0], "_".join(data[1:])
 
-        season_match = re.search(r"(?i)(?:s|season)0*(\d{1,2})", caption) or re.search(r"(?i)(?:s|season)0*(\d{1,2})", file_name)
-        season = season_match.group(1) if season_match else None       
+    if action == "change_poster":
+        await query.message.edit_text("🔄 Send a new poster image.")
+        new_poster = await client.ask(query.message.chat.id, filters=filters.photo, timeout=60)
+        poster_url = new_poster.photo.file_id if new_poster.photo else await upscale_image(await get_movie_details(movie_title)["poster"])
 
-        if year:
-            file_name = file_name[:file_name.find(year) + 4]      
-        elif season:
-            file_name = file_name[:file_name.find(season) + 1]
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🇮🇳 Hindi", callback_data=f"set_language_Hindi_{movie_title}"),
+             InlineKeyboardButton("🇬🇧 English", callback_data=f"set_language_English_{movie_title}")],
+            [InlineKeyboardButton("🇹🇲 Tamil", callback_data=f"set_language_Tamil_{movie_title}"),
+             InlineKeyboardButton("🇹🇹 Telugu", callback_data=f"set_language_Telugu_{movie_title}")],
+            [InlineKeyboardButton("Next ➡️", callback_data=f"select_quality_{movie_title}")]
+        ])
 
-        # Detect quality
-        quality = await check_qualities(caption, ["HDRip", "WEB-DL", "1080p", "720p"]) or "HDRip"
+        await query.message.reply_photo(photo=poster_url, caption="✅ Poster updated!\n\nSelect the language:", reply_markup=reply_markup)
 
-        # Detect language
-        languages = ["Hindi", "English", "Tamil", "Telugu", "Bengali", "Kannada", "Malayalam", "Punjabi", "Gujarati", "Korean", "Japanese"]
-        detected_languages = [lang for lang in languages if lang.lower() in caption.lower()]
-        language = ", ".join(detected_languages) or "Not Sure"
-
-        # Format movie name
-        movie_name = await movie_name_format(file_name)
-        if movie_name in processed_movies:
-            return
-        processed_movies.add(movie_name)
-
-        # Fetch high-quality poster
-        poster_url = await get_movie_details(movie_name)["poster"]
-
-        # Caption formatting
-        caption_message = f"""
-        #New_File_Added ✅
+    elif action.startswith("set_language"):
+        language = action.split("_")[2]
         
-        **File Name:** `{movie_name}`
-        **Language:** {language}
-        **Quality:** {quality}
-        """
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔹 HDRip", callback_data=f"set_quality_HDRip_{movie_title}"),
+             InlineKeyboardButton("🔹 WEB-DL", callback_data=f"set_quality_WEB-DL_{movie_title}")],
+            [InlineKeyboardButton("🔹 1080p", callback_data=f"set_quality_1080p_{movie_title}"),
+             InlineKeyboardButton("🔹 720p", callback_data=f"set_quality_720p_{movie_title}")],
+            [InlineKeyboardButton("Next ➡️", callback_data=f"generate_link_{movie_title}")]
+        ])
 
-        # Buttons for customization
-        buttons = [
-            [InlineKeyboardButton("🔄 Change Quality", callback_data=f"change_quality_{file_id}")],
-            [InlineKeyboardButton("🌍 Change Language", callback_data=f"change_language_{file_id}")],
-            [InlineKeyboardButton("🖼 Replace Poster", callback_data=f"replace_poster_{file_id}")]
-        ]
+        await query.message.edit_text(f"✅ Language set to: {language}\n\nNow, select the quality:", reply_markup=reply_markup)
 
-        reply_markup = InlineKeyboardMarkup(buttons)
+    elif action.startswith("set_quality"):
+        quality = action.split("_")[2]
 
-        # Send message with poster
-        await bot.send_photo(chat_id=ADMINS[0], photo=poster_url, caption=caption_message, reply_markup=reply_markup)
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Yes", callback_data=f"confirm_generate_{movie_title}")],
+            [InlineKeyboardButton("❌ No", callback_data="cancel")]
+        ])
 
-    except Exception as e:
-        print(f"Error: {e}")
+        await query.message.edit_text(f"✅ Quality set to: {quality}\n\nDo you want to generate the file link?", reply_markup=reply_markup)
 
+    elif action == "confirm_generate":
+        movie_name = movie_title.replace("-", " ")
+        db_results = await db.get_session(movie_name)
 
+        if not db_results:
+            await query.message.edit_text("🚫 No download links available in the database.")
+            return
 
-async def get_movie_details(movie_name):
-    ia = imdb.IMDb()  # Initialize IMDb API
-    movies = ia.search_movie(movie_name)  # Search for the movie
-    
-    if not movies:
-        return None  # No results found
+        # Generate file links
+        caption = f"**{movie_name}**\n"
+        links = {}
 
-    movie = movies[0]  # Take the first result
-    movie_id = movie.movieID
-    movie_data = ia.get_movie(movie_id)  # Fetch full movie details
-    
-    return {
-        "title": movie_data.get("title"),
-        "year": movie_data.get("year"),
-        "poster": movie_data.get("cover url", ""),  # Movie poster URL
-        "plot": movie_data.get("plot outline", "No description available."),
-        "id": movie_id
-    }
+        for msg in db_results:
+            quality = await check_qualities(msg.text, ["HDRip", "WEB-DL", "1080p", "720p"])
+            msg_id = msg.message_id
+            encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
+            link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
+
+            if quality in links:
+                links[quality].append(link)
+            else:
+                links[quality] = [link]
+
+        for quality, link_list in links.items():
+            caption += f"📥 **{quality}**: [Download]({link_list[0]})\n"
+
+        await query.message.edit_text(caption, disable_web_page_preview=True)
+
+    elif action == "cancel":
+        await query.message.edit_text("❌ Operation cancelled.")
+
+# Extract quality from caption
+async def check_qualities(text, qualities):
+    for quality in qualities:
+        if quality.lower() in text.lower():
+            return quality
+    return None
