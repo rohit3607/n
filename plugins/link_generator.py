@@ -47,11 +47,16 @@ async def batch(client: Client, message: Message):
 
 
 
+
+
+
+import imdb
+
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client: Client, message: Message):
     while True:
         try:
-            # Ask for the movie name
+            # Step 1: Ask for the movie name
             movie_query = await client.ask(
                 text="Send the Movie Name to search IMDb and generate the link.",
                 chat_id=message.from_user.id,
@@ -60,10 +65,10 @@ async def link_generator(client: Client, message: Message):
             )
         except:
             return
-        
+
         movie_name = movie_query.text.strip()
         imdb_data = await get_movie_details(movie_name)  # Fetch movie details from IMDb
-        
+
         if not imdb_data:
             await movie_query.reply("❌ Movie not found on IMDb. Try again with a different name.", quote=True)
             continue
@@ -73,62 +78,39 @@ async def link_generator(client: Client, message: Message):
         movie_poster = imdb_data.get("poster")
         imdb_id = imdb_data.get("id")
         movie_plot = imdb_data.get("plot", "No description available.")  # Get short plot summary
-        
-        # Search for the movie in the DB Channel
-        db_results = await db.get_session(movie_title)  # Fetch messages with matching movie name
-        
-        if not db_results:
-            await movie_query.reply("❌ No matching files found in the DB Channel.", quote=True)
-            continue
-        
-        # Generate links for each available quality
-        links = {}
-        for msg in db_results:
-            quality = extract_quality(msg.text)  # Extract quality info from the message
-            msg_id = msg.message_id
-            encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
-            link = f"https://t.me/{client.username}?start={encoded}"
-            
-            if quality in links:
-                links[quality].append(link)
-            else:
-                links[quality] = [link]
 
-        # Prepare caption with the requested format
-        caption = f"{movie_title} ({movie_year})\n\n"
+        # Step 2: Search for the movie in the DB Channel
+        db_results = await db.get_session(movie_title)  # Fetch messages with matching movie name
+
+        # Step 3: Prepare caption
+        caption = f"**{movie_title} ({movie_year})**\n\n"
         caption += f"➤ <blockquote>{movie_plot}</blockquote>\n\n"
 
-        for quality, link_list in links.items():
-            if len(link_list) > 1:
-                batch_link = await generate_batch_link(link_list)
-                caption += f"📥 {quality}: [Batch Download]({batch_link})\n"
-            else:
-                caption += f"📥 {quality}: [Download]({link_list[0]})\n"
+        # Step 4: Generate download links if files are found
+        if db_results:
+            links = {}
+            for msg in db_results:
+                quality = extract_quality(msg.text)  # Extract quality info from the message
+                msg_id = msg.message_id
+                encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
+                link = f"https://t.me/{client.username}?start={encoded}"
 
-        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link_list[0]}')]])
+                if quality in links:
+                    links[quality].append(link)
+                else:
+                    links[quality] = [link]
+
+            for quality, link_list in links.items():
+                if len(link_list) > 1:
+                    batch_link = await generate_batch_link(link_list)
+                    caption += f"📥 **{quality}**: [Batch Download]({batch_link})\n"
+                else:
+                    caption += f"📥 **{quality}**: [Download]({link_list[0]})\n"
+        else:
+            caption += "🚫 No download links available in the database.\n"
+
+        # Step 5: Send movie details and poster
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url=https://www.imdb.com/title/{imdb_id}')]])
 
         await message.reply_photo(photo=movie_poster, caption=caption, reply_markup=reply_markup, quote=True)
         break
-
-
-
-import imdb
-
-async def get_movie_details(movie_name):
-    ia = imdb.IMDb()  # Initialize IMDb API
-    movies = ia.search_movie(movie_name)  # Search for the movie
-    
-    if not movies:
-        return None  # No results found
-
-    movie = movies[0]  # Take the first result
-    movie_id = movie.movieID
-    movie_data = ia.get_movie(movie_id)  # Fetch full movie details
-    
-    return {
-        "title": movie_data.get("title"),
-        "year": movie_data.get("year"),
-        "poster": movie_data.get("cover url", ""),  # Movie poster URL
-        "plot": movie_data.get("plot outline", "No description available."),
-        "id": movie_id
-    }
