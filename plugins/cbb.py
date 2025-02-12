@@ -47,3 +47,17 @@ async def cb_handler(client: Bot, query: CallbackQuery):
             await query.message.reply_to_message.delete()
         except:
             pass
+# Handle button clicks (Change Quality, Language, Replace Poster)
+
+    data = query.data.split("_")
+    action, file_id = data[0], "_".join(data[1:])
+
+    elif action == "change_quality":
+        await query.message.edit_text("🔄 Select new quality:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("1080p", callback_data=f"set_quality_1080p_{file_id}"), InlineKeyboardButton("720p", callback_data=f"set_quality_720p_{file_id}")]]))
+    
+    elif action == "change_language":
+        await query.message.edit_text("🌍 Select new language:", reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("English", callback_data=f"set_language_English_{file_id}"), InlineKeyboardButton("Hindi", callback_data=f"set_language_Hindi_{file_id}")]]))
+
+    elif action == "replace_poster":
+        new_poster = await replace_poster(file_id)
+        await query.message.reply_photo(photo=new_poster, caption="✅ Poster updated!")
