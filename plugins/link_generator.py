@@ -234,9 +234,7 @@ async def link_generator(client, message):
         # Step 8: Send poster with final caption
         await message.reply_photo(
             photo=movie_poster,
-            caption=caption,
-            disable_web_page_preview=True
-        )
+            caption=caption)
         break
 
 # Extract quality from caption
