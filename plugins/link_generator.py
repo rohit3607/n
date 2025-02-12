@@ -3,6 +3,7 @@
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from bot import Bot
+from plugins.cbb import *
 from config import *
 from helper_func import encode, get_message_id
 import requests
