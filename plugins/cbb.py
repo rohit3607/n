@@ -5,7 +5,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 import imdb, re, asyncio
 from database.database import *
 
-@@Bot.on_callback_query()
+@Bot.on_callback_query()
 async def cb_handler(client: Bot, query: CallbackQuery):
     data = query.data.split("_")
     action, movie_title = data[0], "_".join(data[1:])  
