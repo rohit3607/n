@@ -53,7 +53,7 @@ async def link_generator(client: Client, message: Message):
         try:
             # Ask for the movie name
             movie_query = await client.ask(
-                text="Send the **Movie Name** to search IMDb and generate the link.",
+                text="Send the Movie Name to search IMDb and generate the link.",
                 chat_id=message.from_user.id,
                 filters=filters.text,
                 timeout=60
