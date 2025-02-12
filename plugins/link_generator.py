@@ -77,14 +77,17 @@ async def link_generator(client: Client, message: Message):
         movie_year = imdb_data.get("year")
         movie_poster = imdb_data.get("poster")
         imdb_id = imdb_data.get("id")
-        movie_plot = imdb_data.get("plot", "No description available.")  # Get short plot summary
+        movie_plot = imdb_data.get("plot", "No description available.")
+
+        # Shorten plot to the first sentence
+        short_plot = movie_plot.split(". ")[0] + "." if "." in movie_plot else movie_plot
 
         # Step 2: Search for the movie in the DB Channel
-        db_results = await db.get_session(movie_title)  # Fetch messages with matching movie name
+        db_results = await db.get_session(movie_title)
 
         # Step 3: Prepare caption
-        caption = f"**{movie_title} ({movie_year})**\n\n"
-        caption += f"➤ <blockquote>{movie_plot}</blockquote>\n\n"
+        caption = f"**{movie_title} ({movie_year})**\n"
+        caption += f"➤ **Details:** {short_plot}\n\n"
 
         # Step 4: Generate download links if files are found
         if db_results:
@@ -110,7 +113,7 @@ async def link_generator(client: Client, message: Message):
             caption += "🚫 No download links available in the database.\n"
 
         # Step 5: Send movie details and poster
-        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url=https://www.imdb.com/title/{imdb_id}')]])
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share", url=f'https://www.imdb.com/title/{imdb_id}')]])
 
         await message.reply_photo(photo=movie_poster, caption=caption, reply_markup=reply_markup, quote=True)
         break
