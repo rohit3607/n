@@ -49,109 +49,63 @@ async def batch(client: Client, message: Message):
 
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('genlink'))
 async def link_generator(client: Client, message: Message):
-    id = message.from_user.id
-    try:
-        movie_query = await client.ask(
-            text="Send the movie name to search in the DB Channel:",
-            chat_id=message.from_user.id,
-            timeout=60
-        )
-    except:
-        return
+    while True:
+        try:
+            # Ask for the movie name
+            movie_query = await client.ask(
+                text="Send the **Movie Name** to search IMDb and generate the link.",
+                chat_id=message.from_user.id,
+                filters=filters.text,
+                timeout=60
+            )
+        except:
+            return
+        
+        movie_name = movie_query.text.strip()
+        imdb_data = await get_movie_details(movie_name)  # Fetch movie details from IMDb
+        
+        if not imdb_data:
+            await movie_query.reply("❌ Movie not found on IMDb. Try again with a different name.", quote=True)
+            continue
 
-    movie_name = movie_query.text
-    search_results = await search_movie_in_db(client, movie_name)
-
-    if not search_results:
-        await message.reply("❌ No results found in the DB Channel. Try another movie name.", quote=True)
-        return
-
-    movie_data = search_results[0]  # Taking the first result (modify if needed)
-    movie_title = movie_data.get('title', 'Unknown Title')
-    year = movie_data.get('year', 'Unknown Year')
-    language = movie_data.get('language', 'Unknown Language')
-    qualities = movie_data.get('qualities', {})
-
-    # Fetch movie poster and details from IMDb
-    poster_url, imdb_rating, genre, plot = await get_movie_poster(movie_title)
-
-    links = []
-    for quality, msg_ids in qualities.items():
-        if isinstance(msg_ids, list) and len(msg_ids) > 1:
-            # Generate batch link if multiple files exist for the same quality
-            encoded_ids = [await encode(f"get-{msg_id * abs(client.db_channel.id)}") for msg_id in msg_ids]
-            batch_link = f"https://t.me/{client.username}?start=batch-" + "-".join(encoded_ids)
-            links.append(f"<b>{quality} (Batch):</b> <a href='{batch_link}'>Download All</a>")
-        else:
-            # Generate a single link if only one file exists
-            msg_id = msg_ids[0] if isinstance(msg_ids, list) else msg_ids
+        movie_title = imdb_data.get("title")
+        movie_year = imdb_data.get("year")
+        movie_poster = imdb_data.get("poster")
+        imdb_id = imdb_data.get("id")
+        movie_plot = imdb_data.get("plot", "No description available.")  # Get short plot summary
+        
+        # Search for the movie in the DB Channel
+        db_results = await db.get_session(movie_title)  # Fetch messages with matching movie name
+        
+        if not db_results:
+            await movie_query.reply("❌ No matching files found in the DB Channel.", quote=True)
+            continue
+        
+        # Generate links for each available quality
+        links = {}
+        for msg in db_results:
+            quality = extract_quality(msg.text)  # Extract quality info from the message
+            msg_id = msg.message_id
             encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
-            single_link = f"https://t.me/{client.username}?start={encoded}"
-            links.append(f"<b>{quality}:</b> <a href='{single_link}'>Download</a>")
+            link = f"https://t.me/{client.username}?start={encoded}"
+            
+            if quality in links:
+                links[quality].append(link)
+            else:
+                links[quality] = [link]
 
-    caption = (
-        f"<b>{movie_title} ({year})</b>\n"
-        f"<b>Language:</b> {language}\n"
-        f"<b>IMDb Rating:</b> {imdb_rating} ⭐\n"
-        f"<b>Genre:</b> {genre}\n\n"
-        f"<b>Plot:</b> {plot}\n\n"
-        + "\n".join(links)
-    )
+        # Prepare caption with the requested format
+        caption = f"{movie_title} ({movie_year})\n\n"
+        caption += f"➤ <blockquote>{movie_plot}</blockquote>\n\n"
 
-    try:
-        if poster_url:
-            response = requests.get(poster_url)
-            poster = BytesIO(response.content)
-            await message.reply_photo(photo=poster, caption=caption, parse_mode="html")
-        else:
-            await message.reply_text(caption, parse_mode="html")
-    except:
-        await message.reply_text("⚠️ Error sending the poster. Sending text instead.", parse_mode="html")
-        await message.reply_text(caption, parse_mode="html")
+        for quality, link_list in links.items():
+            if len(link_list) > 1:
+                batch_link = await generate_batch_link(link_list)
+                caption += f"📥 {quality}: [Batch Download]({batch_link})\n"
+            else:
+                caption += f"📥 {quality}: [Download]({link_list[0]})\n"
 
+        reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link_list[0]}')]])
 
-
-async def search_movie_in_db(client, movie_name):
-    """Search for a movie in the DB Channel using Pyrogram's search_messages()."""
-    movies = []
-
-    async for msg in client.search_messages(client.db_channel.id, query=movie_name, limit=10):
-        movies.append({
-            "msg_id": msg.message_id,
-            "title": "Extracted Title",
-            "year": "Extracted Year",
-            "language": "Extracted Language",
-            "qualities": {
-                "480p": [1111, 2222],  # Example batch links
-                "720p": 3333,  # Single file
-                "1080p": [4444, 5555, 6666]  # Another batch example
-            }
-        })
-
-    return movies  # Return the list of found movies
-
-def extract_qualities_from_message(message):
-    """Extracts qualities (e.g., 480p, 720p, 1080p) and their message IDs from the message."""
-    qualities = {}
-    # Example: assume qualities are included in message as '480p', '720p', etc.
-    for quality in ["480p", "720p", "1080p"]:
-        if quality in message.text:
-            msg_ids = [message.message_id]  # Here we assume that each quality is linked to this message
-            qualities[quality] = msg_ids  # Assign message ID for each quality (adjust if multiple links)
-    return qualities
-
-
-async def get_movie_poster(movie_name):
-    """Fetches movie poster and additional details from OMDb API."""
-    url = f"http://www.omdbapi.com/?t={movie_name}&apikey={OMDB_API_KEY}"
-    response = requests.get(url).json()
-
-    if response.get("Response") == "True":
-        return (
-            response.get("Poster"),  # Poster URL
-            response.get("imdbRating", "N/A"),  # IMDb Rating
-            response.get("Genre", "Unknown"),  # Genre
-            response.get("Plot", "No plot available.")  # Plot
-        )
-
-    return None, "N/A", "Unknown", "No plot available."
+        await message.reply_photo(photo=movie_poster, caption=caption, reply_markup=reply_markup, quote=True)
+        break
