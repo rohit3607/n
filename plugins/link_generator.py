@@ -114,3 +114,24 @@ async def link_generator(client: Client, message: Message):
 
         await message.reply_photo(photo=movie_poster, caption=caption, reply_markup=reply_markup, quote=True)
         break
+
+
+
+async def get_movie_details(movie_name):
+    ia = imdb.IMDb()  # Initialize IMDb API
+    movies = ia.search_movie(movie_name)  # Search for the movie
+    
+    if not movies:
+        return None  # No results found
+
+    movie = movies[0]  # Take the first result
+    movie_id = movie.movieID
+    movie_data = ia.get_movie(movie_id)  # Fetch full movie details
+    
+    return {
+        "title": movie_data.get("title"),
+        "year": movie_data.get("year"),
+        "poster": movie_data.get("cover url", ""),  # Movie poster URL
+        "plot": movie_data.get("plot outline", "No description available."),
+        "id": movie_id
+    }
