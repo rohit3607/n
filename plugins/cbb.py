@@ -5,8 +5,12 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, 
 from database.database import *
 
 @Bot.on_callback_query()
-async def cb_handler(client: Bot, query: CallbackQuery):
+async def cb_handler(client, query: CallbackQuery):
     data = query.data
+    print(f"Callback Data Received: {data}")  # Debugging
+
+    # Respond to keep Telegram from showing "button not working"
+    await query.answer()
 
     if data == "help":
         await query.message.edit_text(
@@ -46,7 +50,7 @@ async def cb_handler(client: Bot, query: CallbackQuery):
             pass
 
     # -------------------------------
-    # New Callbacks for Movie Handling
+    # Callbacks for Movie Handling
     # -------------------------------
     data_parts = data.split("_")
     action = data_parts[0]
