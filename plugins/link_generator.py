@@ -114,7 +114,7 @@ async def link_generator(client, message):
         try:
             # Step 1: Ask for movie name
             movie_query = await client.ask(
-                text="🎬 Send the **Movie Name** to search IMDb and generate the link.",
+                text="🎬 Send the Movie Name to search IMDb and generate the link.",
                 chat_id=message.from_user.id,
                 filters=filters.text,
                 timeout=60
@@ -145,7 +145,7 @@ async def link_generator(client, message):
 
         await message.reply_photo(
             photo=upscaled_poster,
-            caption=f"🎬 **{movie_title} ({movie_year})**\n➤ **Details:** {short_plot}\n\nType `yes` to keep this poster, or `no` to change it.",
+            caption=f"🎬 {movie_title} ({movie_year})\n➤ Details: {short_plot}\n\nType `yes` to keep this poster, or `no` to change it.",
             quote=True
         )
 
@@ -153,7 +153,7 @@ async def link_generator(client, message):
         while True:
             try:
                 poster_choice = await client.ask(
-                    text="➡️ **Do you want to change the poster?**\n\nType `yes` or `no`.",
+                    text="➡️ Do you want to change the poster?\n\nType `yes` or `no`.",
                     chat_id=message.from_user.id,
                     filters=filters.text,
                     timeout=60
@@ -176,7 +176,7 @@ async def link_generator(client, message):
 
                 await message.reply_photo(
                     photo=upscaled_poster,
-                    caption="✅ **Poster updated!**\n\nType `yes` to keep this, or `no` to change again."
+                    caption="✅ Poster updated!\n\nType `yes` to keep this, or `no` to change again."
                 )
 
             else:
@@ -185,7 +185,7 @@ async def link_generator(client, message):
         # Step 4: Ask for language
         try:
             language_msg = await client.ask(
-                text="🌐 **Select a Language**\nType one of the following: `Hindi`, `English`, `Tamil`, `Telugu`",
+                text="🌐 Select a Language\nType one of the following: `Hindi`, `English`, `Tamil`, `Telugu`",
                 chat_id=message.from_user.id,
                 filters=filters.text,
                 timeout=60
@@ -201,7 +201,7 @@ async def link_generator(client, message):
         # Step 5: Ask for quality
         try:
             quality_msg = await client.ask(
-                text="🎥 **Select Quality**\nType one of: `HDRip`, `WEB-DL`, `1080p`, `720p`",
+                text="🎥 Select Quality\nType one of: `HDRip`, `WEB-DL`, `1080p`, `720p`",
                 chat_id=message.from_user.id,
                 filters=filters.text,
                 timeout=60
@@ -218,14 +218,14 @@ async def link_generator(client, message):
         db_results = await db.get_session(movie_title)
 
         # Generate links or display "not available" message
-        caption = f"🎬 **{movie_title} ({movie_year})**\n"
-        caption += f"🌐 **Language:** {language}\n"
-        caption += f"🎥 **Quality:** {quality}\n\n"
+        caption = f"🎬 {movie_title} ({movie_year})\n"
+        caption += f"🌐 Language: {language}\n"
+        caption += f"🎥 Quality: {quality}\n\n"
 
         if not db_results:
-            caption += "🚫 **No download links available in the database.**"
+            caption += "🚫 No download links available in the database."
         else:
-            caption += "**📥 Available Downloads:**\n"
+            caption += "📥 Available Downloads:\n"
             links = {}
 
             for msg in db_results:
@@ -240,7 +240,7 @@ async def link_generator(client, message):
                     links[file_quality] = [link]
 
             for file_quality, link_list in links.items():
-                caption += f"📥 **{file_quality}**: {link_list[0]}\n"
+                caption += f"📥 {file_quality}: {link_list[0]}\n"
 
         # Step 7: Send final poster with caption
         await message.reply_photo(
