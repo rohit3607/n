@@ -56,13 +56,13 @@ import requests
 from io import BytesIO
 from PIL import Image
 from pyrogram import Client, filters
+from pyrogram.enums import ParseMode
 
 # Function to upscale image
 async def upscale_image(image_url):
     try:
         response = requests.get(image_url, stream=True)
         response.raise_for_status()
-
         image = Image.open(BytesIO(response.content))
 
         # Resize image using PIL (LANCZOS for best quality)
@@ -117,7 +117,7 @@ async def link_generator(client, message):
         try:
             # Step 1: Ask for movie name
             movie_query = await client.ask(
-                text="🎬 Send the Movie Name to search IMDb and generate the link.",
+                text="🎬 Send the Movie Name to fetch IMDb details and generate a link.",
                 chat_id=message.from_user.id,
                 filters=filters.text,
                 timeout=60
@@ -143,7 +143,7 @@ async def link_generator(client, message):
             await message.reply("⚠️ No poster found for this movie.")
             return
 
-        # Step 2: Send first upscaled poster
+        # Send first upscaled poster immediately
         movie_poster_url = imdb_posters[0]
         upscaled_poster = await upscale_image(movie_poster_url) or movie_poster_url
 
@@ -156,40 +156,7 @@ async def link_generator(client, message):
             quote=True
         )
 
-        # Step 3: Ask if they want to change the poster
-        while True:
-            try:
-                poster_choice = await client.ask(
-                    text="➡️ Do you want to change the poster?\n\nType `yes` or `no`.",
-                    chat_id=message.from_user.id,
-                    filters=filters.text,
-                    timeout=60
-                )
-            except:
-                return
-
-            if poster_choice.text.lower() == "no":
-                break  # Move to the next step
-
-            elif poster_choice.text.lower() == "yes":
-                imdb_posters.pop(0)  # Remove current poster
-                if not imdb_posters:
-                    await message.reply("❌ No more posters available.")
-                    break
-
-                # Fetch another poster
-                new_poster_url = imdb_posters[0]
-                upscaled_poster = await upscale_image(new_poster_url) or new_poster_url
-
-                await message.reply_photo(
-                    photo=upscaled_poster,
-                    caption="✅ Poster updated!"
-                )
-
-            else:
-                await message.reply("❌ Invalid choice. Type `yes` or `no`.")
-
-        # Step 4: Ask for language
+        # Step 2: Ask for Language
         try:
             language_msg = await client.ask(
                 text="🌐 Select a Language\nType one of the following: `Hindi`, `English`, `Tamil`, `Telugu`",
@@ -205,7 +172,7 @@ async def link_generator(client, message):
             await message.reply("❌ **Invalid language. Using default: `English`.")
             language = "English"
 
-        # Step 5: Ask for quality
+        # Step 3: Ask for Quality
         try:
             quality_msg = await client.ask(
                 text="🎥 Select Quality\nType one of: `HDRip`, `WEB-DL`, `1080p`, `720p`",
@@ -221,8 +188,52 @@ async def link_generator(client, message):
             await message.reply("❌ Invalid quality. Using default: `720p`.")
             quality = "720p"
 
-        # Step 6: Fetch movie from database and generate links
-        db_results = await search_movie_in_db(client, movie_title)
+        # Step 4: Ask if user wants to add a file
+        try:
+            add_file_msg = await client.ask(
+                text="📂 Do you want to upload a file? (Type `yes` or `no`)",
+                chat_id=message.from_user.id,
+                filters=filters.text,
+                timeout=60
+            )
+        except:
+            return
+
+        if add_file_msg.text.lower() == "no":
+            await message.reply("✅ Link generation completed without file upload.")
+            return
+
+        # Step 5: Ask if it's a single or batch file
+        try:
+            file_type_msg = await client.ask(
+                text="📁 Is this a `Single` file or `Batch` upload?\n\nType `single` or `batch`.",
+                chat_id=message.from_user.id,
+                filters=filters.text,
+                timeout=60
+            )
+        except:
+            return
+
+        file_type = file_type_msg.text.lower()
+        if file_type not in ["single", "batch"]:
+            await message.reply("❌ Invalid choice. Assuming `Single` file.")
+            file_type = "single"
+
+        # Step 6: Ask for file upload
+        try:
+            file_msg = await client.ask(
+                text="📤 Please upload the file now.",
+                chat_id=message.from_user.id,
+                filters=filters.document,
+                timeout=180
+            )
+        except:
+            return
+
+        # Step 7: Store file and generate link
+        file_name = file_msg.document.file_name
+        file_id = file_msg.message_id
+        chat_id = message.chat.id
 
         # Generate formatted caption
         caption = (
@@ -232,61 +243,21 @@ async def link_generator(client, message):
             f"🎥 Quality: `{quality}`\n\n"
         )
 
-        if not db_results:
-            caption += "🚫 No download links available in the database."
+        # Create download link
+        encoded = await encode(f"get-{file_id * abs(chat_id)}")
+        link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
+
+        if file_type == "batch":
+            caption += "📂 Batch Files:\n"
         else:
-            caption += "📥 Available Downloads:\n"
-            links = {}
+            caption += "📥 Download Link:\n"
 
-            for msg in db_results:
-                file_quality = await check_qualities(msg.text, ["HDRip", "WEB-DL", "1080p", "720p"])
-                msg_id = msg.message_id
-                encoded = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
-                link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
+        caption += f"🔗 [`Download Here`]({link})\n"
 
-                if file_quality in links:
-                    links[file_quality].append(link)
-                else:
-                    links[file_quality] = [link]
-
-            for file_quality, link_list in links.items():
-                caption += f"🔗 {file_quality}: [`Download Here`]({link_list[0]})\n"
-
-        # Step 7: Send final poster with caption
+        # Step 8: Send final poster with caption
         await message.reply_photo(
             photo=upscaled_poster,
             caption=caption,
             parse_mode=ParseMode.MARKDOWN
         )
         break
-
-
-# Extract quality from caption
-async def check_qualities(text, qualities):
-    for quality in qualities:
-        if quality.lower() in text.lower():
-            return quality
-    return None
-
-
-async def search_movie_in_db(client, movie_title):
-    try:
-        # Ensure the bot is an admin
-        chat = await client.get_chat(CHANNEL_ID)
-        db_channel_id = chat.id
-    except Exception as e:
-        print(f"Error resolving DB channel: {e}")
-        return []
-
-    found_messages = []
-    
-    # Get stored message IDs from your database (modify based on your setup)
-    message_ids = [msg_id async for msg_id in client.get_chat_history(db_channel_id, limit=1000)]
-    
-    # Fetch messages one by one
-    for msg_id in message_ids:
-        msg = await client.get_messages(db_channel_id, msg_id)
-        if msg.text and movie_name.lower() in msg.text.lower():
-            found_messages.append(msg)
-
-    return found_messages
