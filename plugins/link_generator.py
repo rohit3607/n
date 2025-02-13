@@ -129,6 +129,7 @@ async def link_generator(client, message):
             await movie_query.reply("❌ Movie not found on IMDb. Try again with a different name.", quote=True)
             continue
 
+        # Extract IMDb details
         movie_title = imdb_data.get("title")
         movie_year = imdb_data.get("year")
         imdb_posters = imdb_data.get("posters", [])
@@ -145,7 +146,12 @@ async def link_generator(client, message):
 
         await message.reply_photo(
             photo=upscaled_poster,
-            caption=f"🎬 {movie_title} ({movie_year})\n➤ Details: {short_plot}\n\nType `yes` to keep this poster, or `no` to change it.",
+            caption=(
+                f"🎬 {movie_title} ({movie_year})\n"
+                f"📝 {short_plot}\n\n"
+                "➡️ Do you want to keep this poster?\n"
+                "Type `yes` to keep, or `no` to change."
+            ),
             quote=True
         )
 
@@ -170,13 +176,13 @@ async def link_generator(client, message):
                     await message.reply("❌ No more posters available.")
                     break
 
-                # Fetch another poster with a matching name
+                # Fetch another poster
                 new_poster_url = imdb_posters[0]
                 upscaled_poster = await upscale_image(new_poster_url) or new_poster_url
 
                 await message.reply_photo(
                     photo=upscaled_poster,
-                    caption="✅ Poster updated!\n\nType `yes` to keep this, or `no` to change again."
+                    caption="✅ Poster updated!\n\nType `yes` to keep, or `no` to change again."
                 )
 
             else:
@@ -195,7 +201,7 @@ async def link_generator(client, message):
 
         language = language_msg.text.strip().capitalize()
         if language not in ["Hindi", "English", "Tamil", "Telugu"]:
-            await message.reply("❌ Invalid language. Using default: `English`.")
+            await message.reply("❌ **Invalid language. Using default: `English`.")
             language = "English"
 
         # Step 5: Ask for quality
@@ -217,10 +223,13 @@ async def link_generator(client, message):
         # Step 6: Fetch movie from database and generate links
         db_results = await db.get_session(movie_title)
 
-        # Generate links or display "not available" message
-        caption = f"🎬 {movie_title} ({movie_year})\n"
-        caption += f"🌐 Language: {language}\n"
-        caption += f"🎥 Quality: {quality}\n\n"
+        # Generate formatted caption
+        caption = (
+            f"🎬 {movie_title} ({movie_year})\n"
+            f"📝 {short_plot}\n\n"
+            f"🌐 Language: `{language}`\n"
+            f"🎥 Quality: `{quality}`\n\n"
+        )
 
         if not db_results:
             caption += "🚫 No download links available in the database."
@@ -240,14 +249,16 @@ async def link_generator(client, message):
                     links[file_quality] = [link]
 
             for file_quality, link_list in links.items():
-                caption += f"📥 {file_quality}: {link_list[0]}\n"
+                caption += f"🔗 {file_quality}: [`Download Here`]({link_list[0]})\n"
 
         # Step 7: Send final poster with caption
         await message.reply_photo(
             photo=upscaled_poster,
-            caption=caption
+            caption=caption,
+            parse_mode="Markdown"
         )
         break
+
 
 # Extract quality from caption
 async def check_qualities(text, qualities):
