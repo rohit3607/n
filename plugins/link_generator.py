@@ -269,15 +269,24 @@ async def check_qualities(text, qualities):
     return None
 
 
-async def search_movie_in_db(client, movie_name):
-    """
-    Search for a movie in the database channel using chat history.
-    """
-    db_channel_id = -abs(CHANNEL_ID)  # Use the correct channel ID variable
-    found_messages = []
+async def search_movie_in_db(client, movie_title):
+    try:
+        # Ensure the bot is an admin
+        chat = await client.get_chat(DB_CHANNEL)
+        db_channel_id = chat.id
+    except Exception as e:
+        print(f"Error resolving DB channel: {e}")
+        return []
 
-    async for message in client.get_chat_history(db_channel_id, limit=1000):  # Adjust limit as needed
-        if message.text and movie_name.lower() in message.text.lower():
-            found_messages.append(message)
+    found_messages = []
+    
+    # Get stored message IDs from your database (modify based on your setup)
+    message_ids = [msg_id async for msg_id in client.get_chat_history(db_channel_id, limit=1000)]
+    
+    # Fetch messages one by one
+    for msg_id in message_ids:
+        msg = await client.get_messages(db_channel_id, msg_id)
+        if msg.text and movie_name.lower() in msg.text.lower():
+            found_messages.append(msg)
 
     return found_messages
