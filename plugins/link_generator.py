@@ -272,7 +272,7 @@ async def check_qualities(text, qualities):
 async def search_movie_in_db(client, movie_title):
     try:
         # Ensure the bot is an admin
-        chat = await client.get_chat(DB_CHANNEL)
+        chat = await client.get_chat(CHANNEL_ID)
         db_channel_id = chat.id
     except Exception as e:
         print(f"Error resolving DB channel: {e}")
