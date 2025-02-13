@@ -219,45 +219,85 @@ async def link_generator(client, message):
             await message.reply("❌ Invalid choice. Assuming `Single` file.")
             file_type = "single"
 
-        # Step 6: Ask for file upload
-        try:
-            file_msg = await client.ask(
-                text="📤 Please upload the file now.",
-                chat_id=message.from_user.id,
-                filters=filters.document,
-                timeout=180
-            )
-        except:
-            return
+        if file_type == "single":
+            # Single file logic (Using `genlink`)
+            try:
+                channel_message = await client.ask(
+                    text="📤 Forward the Message from the DB Channel or Send the DB Channel Post link.",
+                    chat_id=message.from_user.id,
+                    filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                    timeout=60
+                )
+            except:
+                return
 
-        # Step 7: Store file and generate link
-        file_name = file_msg.document.file_name
-        file_id = file_msg.message_id
-        chat_id = message.chat.id
+            msg_id = await get_message_id(client, channel_message)
+            if not msg_id:
+                await channel_message.reply("❌ Error: Not from the DB Channel.", quote=True)
+                return
 
-        # Generate formatted caption
+            base64_string = await encode(f"get-{msg_id * abs(client.db_channel.id)}")
+            link = f"https://t.me/{client.username}?start={base64_string}"
+
+        else:
+            # Batch file logic (Using `batch`)
+            while True:
+                try:
+                    first_message = await client.ask(
+                        text="📤 Forward the First Message from the DB Channel or Send the DB Channel Post Link.",
+                        chat_id=message.from_user.id,
+                        filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                        timeout=60
+                    )
+                except:
+                    return
+
+                f_msg_id = await get_message_id(client, first_message)
+                if f_msg_id:
+                    break
+                else:
+                    await first_message.reply("❌ Error: Not from the DB Channel.", quote=True)
+
+            while True:
+                try:
+                    second_message = await client.ask(
+                        text="📤 Forward the Last Message from the DB Channel or Send the DB Channel Post Link.",
+                        chat_id=message.from_user.id,
+                        filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                        timeout=60
+                    )
+                except:
+                    return
+
+                    s_msg_id = await get_message_id(client, second_message)
+                    if s_msg_id:
+                        break
+                    else:
+                        await second_message.reply("❌ Error: Not from the DB Channel.", quote=True)
+
+            string = f"get-{f_msg_id * abs(client.db_channel.id)}-{s_msg_id * abs(client.db_channel.id)}"
+            base64_string = await encode(string)
+            link = f"https://t.me/{client.username}?start={base64_string}"
+
+        # Step 7: Generate final caption
         caption = (
             f"🎬 {movie_title} ({movie_year})\n\n"
             f"📝 Plot : {short_plot}\n\n"
             f"🌐 Language: `{language}`\n"
             f"🎥 Quality: `{quality}`\n\n"
+            f"📥 {'Batch Files' if file_type == 'batch' else 'Download Link'}:\n"
+            f"🔗 [`Download Here`]({link})\n"
         )
 
-        # Create download link
-        encoded = await encode(f"get-{file_id * abs(chat_id)}")
-        link = f"https://t.me/{BOT_USERNAME}?start={encoded}"
-
-        if file_type == "batch":
-            caption += "📂 Batch Files:\n"
-        else:
-            caption += "📥 Download Link:\n"
-
-        caption += f"🔗 [`Download Here`]({link})\n"
+        reply_markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔁 Share URL", url=f'https://telegram.me/share/url?url={link}')]
+        ])
 
         # Step 8: Send final poster with caption
         await message.reply_photo(
             photo=upscaled_poster,
             caption=caption,
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=reply_markup
         )
         break
