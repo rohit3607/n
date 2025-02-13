@@ -224,7 +224,7 @@ async def link_generator(client, message):
             quality = "720p"
 
         # Step 6: Fetch movie from database and generate links
-        db_results = await search_movie_in_db(movie_title)
+        db_results = await search_movie_in_db(client, movie_title)
 
         # Generate formatted caption
         caption = (
@@ -271,15 +271,15 @@ async def check_qualities(text, qualities):
     return None
 
 
-async def search_movie_in_db(movie_name):
+async def search_movie_in_db(client, movie_name):
     """
     Search for a movie in the database channel using chat history.
     """
-    db_channel_id = abs(client.db_channel.id)  # Your database channel ID
+    db_channel_id = abs(DB_CHANNEL)  # Use the correct channel ID variable
     found_messages = []
 
     async for message in client.get_chat_history(db_channel_id, limit=1000):  # Adjust limit as needed
         if message.text and movie_name.lower() in message.text.lower():
             found_messages.append(message)
-    
+
     return found_messages
