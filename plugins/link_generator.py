@@ -255,7 +255,7 @@ async def link_generator(client, message):
         await message.reply_photo(
             photo=upscaled_poster,
             caption=caption,
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
         break
 
