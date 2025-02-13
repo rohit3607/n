@@ -169,7 +169,7 @@ async def link_generator(client, message):
 
         language = language_msg.text.strip().capitalize()
         if language not in ["Hindi", "English", "Tamil", "Telugu"]:
-            await message.reply("❌ **Invalid language. Using default: `English`.")
+            await message.reply("❌ Invalid language. Using default: `English`.")
             language = "English"
 
         # Step 3: Ask for Quality
@@ -243,7 +243,7 @@ async def link_generator(client, message):
             # Batch file logic (Using `batch`)
             try:
                 first_message = await client.ask(
-                    text="📤 Forward the **First** Message from the DB Channel or Send the DB Channel Post Link.",
+                    text="📤 Forward the First Message from the DB Channel or Send the DB Channel Post Link.",
                     chat_id=message.from_user.id,
                     filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
                     timeout=60
@@ -254,7 +254,7 @@ async def link_generator(client, message):
                     return
 
                 second_message = await client.ask(
-                    text="📤 Forward the **Last** Message from the DB Channel or Send the DB Channel Post Link.",
+                    text="📤 Forward the Last Message from the DB Channel or Send the DB Channel Post Link.",
                     chat_id=message.from_user.id,
                     filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
                     timeout=60
@@ -278,8 +278,8 @@ async def link_generator(client, message):
             f"📝 Plot : {short_plot}\n\n"
             f"🌐 Language: `{language}`\n"
             f"🎥 Quality: `{quality}`\n\n"
-            f"📥 {'Batch Files' if file_type == 'batch' else 'Download Link'}:\n"
-            f"🔗 [`Download Here`]({link})\n"
+            f"📥 {'Click Here' if file_type == 'batch' else 'Download Link'}:\n"
+            f"🔗 [Download Here]({link})\n"
         )
 
         reply_markup = InlineKeyboardMarkup([
