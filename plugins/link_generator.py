@@ -14,6 +14,21 @@ from io import BytesIO
 # Replace this with your actual OMDb API key
 OMDB_API_KEY = "601c408a"
 
+async def search_movie_in_db(movie_name):
+    """
+    Search for a movie in the database channel using chat history.
+    """
+    db_channel_id = abs(client.db_channel.id)  # Your database channel ID
+    found_messages = []
+
+    async for message in client.get_chat_history(db_channel_id, limit=1000):  # Adjust limit as needed
+        if message.text and movie_name.lower() in message.text.lower():
+            found_messages.append(message)
+    
+    return found_messages
+
+
+
 @Bot.on_message(filters.private & filters.user(ADMINS) & filters.command('batch'))
 async def batch(client: Client, message: Message):
     while True:
@@ -222,12 +237,12 @@ async def link_generator(client, message):
             quality = "720p"
 
         # Step 6: Fetch movie from database and generate links
-        db_results = await db.get_session(movie_title)
+        db_results = await search_movie_in_db(movie_title)
 
         # Generate formatted caption
         caption = (
-            f"🎬 {movie_title} ({movie_year})\n"
-            f"📝 {short_plot}\n\n"
+            f"🎬 {movie_title} ({movie_year})\n\n"
+            f"📝 Plot : {short_plot}\n\n"
             f"🌐 Language: `{language}`\n"
             f"🎥 Quality: `{quality}`\n\n"
         )
