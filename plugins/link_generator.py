@@ -241,43 +241,36 @@ async def link_generator(client, message):
 
         else:
             # Batch file logic (Using `batch`)
-            while True:
-                try:
-                    first_message = await client.ask(
-                        text="📤 Forward the First Message from the DB Channel or Send the DB Channel Post Link.",
-                        chat_id=message.from_user.id,
-                        filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                        timeout=60
-                    )
-                except:
-                    return
-
+            try:
+                first_message = await client.ask(
+                    text="📤 Forward the **First** Message from the DB Channel or Send the DB Channel Post Link.",
+                    chat_id=message.from_user.id,
+                    filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                    timeout=60
+                )
                 f_msg_id = await get_message_id(client, first_message)
-                if f_msg_id:
-                    break
-                else:
+                if not f_msg_id:
                     await first_message.reply("❌ Error: Not from the DB Channel.", quote=True)
-
-            while True:
-                try:
-                    second_message = await client.ask(
-                        text="📤 Forward the Last Message from the DB Channel or Send the DB Channel Post Link.",
-                        chat_id=message.from_user.id,
-                        filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                        timeout=60
-                    )
-                except:
                     return
 
-                    s_msg_id = await get_message_id(client, second_message)
-                    if s_msg_id:
-                        break
-                    else:
-                        await second_message.reply("❌ Error: Not from the DB Channel.", quote=True)
+                second_message = await client.ask(
+                    text="📤 Forward the **Last** Message from the DB Channel or Send the DB Channel Post Link.",
+                    chat_id=message.from_user.id,
+                    filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                    timeout=60
+                )
+                s_msg_id = await get_message_id(client, second_message)
+                if not s_msg_id:
+                    await second_message.reply("❌ Error: Not from the DB Channel.", quote=True)
+                    return
 
-            string = f"get-{f_msg_id * abs(client.db_channel.id)}-{s_msg_id * abs(client.db_channel.id)}"
-            base64_string = await encode(string)
-            link = f"https://t.me/{client.username}?start={base64_string}"
+                string = f"get-{f_msg_id * abs(client.db_channel.id)}-{s_msg_id * abs(client.db_channel.id)}"
+                base64_string = await encode(string)
+                link = f"https://t.me/{client.username}?start={base64_string}"
+
+            except Exception as e:
+                await message.reply(f"⚠️ An error occurred: {e}")
+                return
 
         # Step 7: Generate final caption
         caption = (
@@ -285,7 +278,7 @@ async def link_generator(client, message):
             f"📝 Plot : {short_plot}\n\n"
             f"🌐 Language: `{language}`\n"
             f"🎥 Quality: `{quality}`\n\n"
-            f"📥 {'Download Link'}:\n"
+            f"📥 {'Batch Files' if file_type == 'batch' else 'Download Link'}:\n"
             f"🔗 [`Download Here`]({link})\n"
         )
 
