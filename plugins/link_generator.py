@@ -285,7 +285,7 @@ async def link_generator(client, message):
             f"📝 Plot : {short_plot}\n\n"
             f"🌐 Language: `{language}`\n"
             f"🎥 Quality: `{quality}`\n\n"
-            f"📥 {'Batch Files' if file_type == 'batch' else 'Download Link'}:\n"
+            f"📥 {'Download Link'}:\n"
             f"🔗 [`Download Here`]({link})\n"
         )
 
