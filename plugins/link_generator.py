@@ -151,9 +151,7 @@ async def link_generator(client, message):
             photo=upscaled_poster,
             caption=(
                 f"🎬 {movie_title} ({movie_year})\n"
-                f"📝 {short_plot}\n\n"
-                "➡️ Do you want to keep this poster?\n"
-                "Type `yes` to keep, or `no` to change."
+                f"📝 {short_plot}"
             ),
             quote=True
         )
@@ -275,7 +273,7 @@ async def search_movie_in_db(client, movie_name):
     """
     Search for a movie in the database channel using chat history.
     """
-    db_channel_id = abs(DB_CHANNEL)  # Use the correct channel ID variable
+    db_channel_id = abs(CHANNEL_ID)  # Use the correct channel ID variable
     found_messages = []
 
     async for message in client.get_chat_history(db_channel_id, limit=1000):  # Adjust limit as needed
