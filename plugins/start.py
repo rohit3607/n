@@ -29,33 +29,33 @@ TUT_VID = f"{TUT_VID}"
 async def pdf_handler(bot: Client, message: Message):
     # Ask the user to send a ZIP file
     prompt = await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
-    
-    # Wait for the ZIP file message (only within this command's context) with a 30-second timeout
+
+    # Wait for ZIP file within this command's context (30-second timeout)
     try:
         zip_msg = await bot.listen(
             message.chat.id, 
-            filters.document & filters.create(lambda _, m: m.document.file_name.endswith(".zip")),
+            filters.document & filters.create(lambda _, __, m: m.document and m.document.file_name.endswith(".zip")),
             timeout=30
         )
     except asyncio.TimeoutError:
         return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
 
-    # Use the name of the ZIP file (without extension) for the PDF file name
+    # Use the ZIP file's name (without extension) for the PDF
     zip_name = os.path.splitext(zip_msg.document.file_name)[0]
     zip_path = f"downloads/{zip_msg.document.file_name}"
     extract_folder = f"downloads/{zip_name}_extracted"
 
-    # Download the ZIP file
+    # Download ZIP
     await zip_msg.download(zip_path)
 
-    # Extract the ZIP file
+    # Extract ZIP
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_folder)
     except zipfile.BadZipFile:
         return await message.reply_text("❌ Invalid ZIP file.")
 
-    # Get image files in alphabetical order (ascending)
+    # Get images sorted alphabetically
     image_files = sorted(
         [os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
          if f.lower().endswith((".png", ".jpg", ".jpeg"))]
@@ -64,15 +64,15 @@ async def pdf_handler(bot: Client, message: Message):
     if not image_files:
         return await message.reply_text("❌ No images found in the ZIP.")
 
-    # Convert images to PDF using the ZIP file name
+    # Convert images to PDF
     pdf_path = f"downloads/{zip_name}.pdf"
     images = [Image.open(img).convert("RGB") for img in image_files]
     images[0].save(pdf_path, save_all=True, append_images=images[1:])
 
-    # Send the generated PDF back to the user
+    # Send the generated PDF
     await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
 
-    # Clean up: remove downloaded and generated files/folders
+    # Clean up files
     os.remove(zip_path)
     os.remove(pdf_path)
     for img in image_files:
