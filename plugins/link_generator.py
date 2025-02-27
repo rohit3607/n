@@ -50,7 +50,7 @@ async def batch(client: Client, message: Message):
     await second_message.reply_text(f"<b>Here is your link</b>\n\n{link}", quote=True, reply_markup=reply_markup)
 
 
-import imdb
+#import imdb
 import asyncio
 import requests
 from io import BytesIO
