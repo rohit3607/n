@@ -53,8 +53,8 @@ async def batch(client: Client, message: Message):
 #import imdb
 import asyncio
 import requests
-from io import BytesIO
-from PIL import Image
+#from io import BytesIO
+#from PIL import Image
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 
