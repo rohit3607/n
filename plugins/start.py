@@ -3,6 +3,7 @@
 
 import asyncio
 import os
+import re
 import random
 import sys
 import shutil
@@ -26,9 +27,9 @@ FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
 TUT_VID = f"{TUT_VID}"
 
 
-def sorted_natural(file_list):
-    """Sort files in natural order (e.g., img1, img2, img10 instead of img1, img10, img2)."""
-    import re
+
+def natural_sort(file_list):
+    """Sorts file names naturally (e.g., img1, img2, img10 instead of img1, img10, img2)."""
     return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
 
 @Bot.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
@@ -56,10 +57,13 @@ async def pdf_handler(bot: Client, message: Message):
     except zipfile.BadZipFile:
         return await message.reply_text("❌ Invalid ZIP file.")
 
-    # Get image files in proper sorted order
-    image_files = sorted_natural([
+    # Supported image formats
+    valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
+
+    # Get image files, sorted naturally
+    image_files = natural_sort([
         os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
-        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+        if f.lower().endswith(valid_extensions)
     ])
 
     if not image_files:
@@ -69,14 +73,14 @@ async def pdf_handler(bot: Client, message: Message):
 
     try:
         first_image = Image.open(image_files[0]).convert("RGB")
-        image_list = (Image.open(img).convert("RGB") for img in image_files[1:])  # Generator for low memory usage
+        image_list = (Image.open(img).convert("RGB") for img in image_files[1:])  # Generator for memory efficiency
         first_image.save(pdf_path, save_all=True, append_images=image_list)
     except Exception as e:
         return await message.reply_text(f"❌ Error converting to PDF: {e}")
 
     await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
 
-    # Clean up
+    # Cleanup
     os.remove(zip_path)
     os.remove(pdf_path)
     shutil.rmtree(extract_folder, ignore_errors=True)
