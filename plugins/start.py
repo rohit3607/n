@@ -5,6 +5,7 @@ import asyncio
 import os
 import random
 import sys
+import shutil
 import zipfile
 from PIL import Image
 import time
@@ -28,7 +29,7 @@ TUT_VID = f"{TUT_VID}"
 @Bot.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
 async def pdf_handler(bot: Client, message: Message):
     # Ask the user to send a ZIP file
-    prompt = await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
+    await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
 
     # Wait for ZIP file within this command's context (30-second timeout)
     try:
@@ -70,15 +71,16 @@ async def pdf_handler(bot: Client, message: Message):
     images[0].save(pdf_path, save_all=True, append_images=images[1:])
 
     # Send the generated PDF
-    await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
+    await message.reply_document(pdf_path, caption=f"Here is your PDF: **{zip_name}.pdf** 📄")
 
     # Clean up files
     os.remove(zip_path)
     os.remove(pdf_path)
     for img in image_files:
         os.remove(img)
-    os.rmdir(extract_folder)
 
+    # Use shutil.rmtree() instead of os.rmdir()
+    shutil.rmtree(extract_folder, ignore_errors=True)
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
