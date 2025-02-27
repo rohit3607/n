@@ -26,12 +26,15 @@ FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
 TUT_VID = f"{TUT_VID}"
 
 
+def sorted_natural(file_list):
+    """Sort files in natural order (e.g., img1, img2, img10 instead of img1, img10, img2)."""
+    import re
+    return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
+
 @Bot.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
 async def pdf_handler(bot: Client, message: Message):
-    # Ask the user to send a ZIP file
     await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
 
-    # Wait for ZIP file within this command's context (30-second timeout)
     try:
         zip_msg = await bot.listen(
             message.chat.id, 
@@ -41,45 +44,41 @@ async def pdf_handler(bot: Client, message: Message):
     except asyncio.TimeoutError:
         return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
 
-    # Use the ZIP file's name (without extension) for the PDF
     zip_name = os.path.splitext(zip_msg.document.file_name)[0]
     zip_path = f"downloads/{zip_msg.document.file_name}"
     extract_folder = f"downloads/{zip_name}_extracted"
 
-    # Download ZIP
     await zip_msg.download(zip_path)
 
-    # Extract ZIP
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(extract_folder)
     except zipfile.BadZipFile:
         return await message.reply_text("❌ Invalid ZIP file.")
 
-    # Get images sorted alphabetically
-    image_files = sorted(
-        [os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
-         if f.lower().endswith((".png", ".jpg", ".jpeg"))]
-    )
+    # Get image files in proper sorted order
+    image_files = sorted_natural([
+        os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
+        if f.lower().endswith((".png", ".jpg", ".jpeg"))
+    ])
 
     if not image_files:
         return await message.reply_text("❌ No images found in the ZIP.")
 
-    # Convert images to PDF
     pdf_path = f"downloads/{zip_name}.pdf"
-    images = [Image.open(img).convert("RGB") for img in image_files]
-    images[0].save(pdf_path, save_all=True, append_images=images[1:])
 
-    # Send the generated PDF
-    await message.reply_document(pdf_path, caption=f"Here is your PDF: **{zip_name}.pdf** 📄")
+    try:
+        first_image = Image.open(image_files[0]).convert("RGB")
+        image_list = (Image.open(img).convert("RGB") for img in image_files[1:])  # Generator for low memory usage
+        first_image.save(pdf_path, save_all=True, append_images=image_list)
+    except Exception as e:
+        return await message.reply_text(f"❌ Error converting to PDF: {e}")
 
-    # Clean up files
+    await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
+
+    # Clean up
     os.remove(zip_path)
     os.remove(pdf_path)
-    for img in image_files:
-        os.remove(img)
-
-    # Use shutil.rmtree() instead of os.rmdir()
     shutil.rmtree(extract_folder, ignore_errors=True)
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
