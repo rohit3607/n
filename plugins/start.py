@@ -84,68 +84,7 @@ async def pdf_handler(bot: Client, message: Message):
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
     id = message.from_user.id
-    if not awaiimport os
-import zipfile
-import asyncio
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from PIL import Image
-
-ADMINS = [123456789]  # Replace with your actual admin IDs
-
-@Bot.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
-async def pdf_handler(bot: Client, message: Message):
-    # Ask the user to send a ZIP file
-    prompt = await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
-    
-    # Wait for the ZIP file message (only within this command's context) with a 30-second timeout
-    try:
-        zip_msg = await bot.listen(
-            message.chat.id, 
-            filters.document & filters.create(lambda _, m: m.document.file_name.endswith(".zip")),
-            timeout=30
-        )
-    except asyncio.TimeoutError:
-        return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
-
-    # Use the name of the ZIP file (without extension) for the PDF file name
-    zip_name = os.path.splitext(zip_msg.document.file_name)[0]
-    zip_path = f"downloads/{zip_msg.document.file_name}"
-    extract_folder = f"downloads/{zip_name}_extracted"
-
-    # Download the ZIP file
-    await zip_msg.download(zip_path)
-
-    # Extract the ZIP file
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_folder)
-    except zipfile.BadZipFile:
-        return await message.reply_text("❌ Invalid ZIP file.")
-
-    # Get image files in alphabetical order (ascending)
-    image_files = sorted(
-        [os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
-         if f.lower().endswith((".png", ".jpg", ".jpeg"))]
-    )
-
-    if not image_files:
-        return await message.reply_text("❌ No images found in the ZIP.")
-
-    # Convert images to PDF using the ZIP file name
-    pdf_path = f"downloads/{zip_name}.pdf"
-    images = [Image.open(img).convert("RGB") for img in image_files]
-    images[0].save(pdf_path, save_all=True, append_images=images[1:])
-
-    # Send the generated PDF back to the user
-    await message.reply_document(pdf_path, caption=f"Here is your PDF: **{zip_name}.pdf** 📄")
-
-    # Clean up: remove downloaded and generated files/folders
-    os.remove(zip_path)
-    os.remove(pdf_path)
-    for img in image_files:
-        os.remove(img)
-    os.rmdir(extract_folder)t db.present_user(id):
+    if not await db.present_user(id):
         try:
             await db.add_user(id)
         except:
