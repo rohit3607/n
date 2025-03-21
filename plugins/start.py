@@ -82,16 +82,12 @@ async def pdf_handler(bot: Client, message: Message):
         if not image_files:
             return await message.reply_text("❌ No images found in the ZIP.")
 
-        # Convert images to PDF
+        # Convert images to PDF without compression
         try:
             first_image = Image.open(image_files[0]).convert("RGB")
-            first_image.thumbnail((2000, 2000))  # Resize to reduce memory usage
 
-            image_list = []
-            for img_path in image_files[1:]:
-                img = Image.open(img_path).convert("RGB")
-                img.thumbnail((2000, 2000))  # Resize
-                image_list.append(img)
+            # Open images without compression
+            image_list = [Image.open(img).convert("RGB") for img in image_files[1:]]
 
             first_image.save(pdf_path, save_all=True, append_images=image_list)
         except Exception as e:
@@ -100,6 +96,7 @@ async def pdf_handler(bot: Client, message: Message):
         # Upload PDF with delay to avoid Telegram API rate limits
         await asyncio.sleep(2)  # Small delay
         await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
+
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
