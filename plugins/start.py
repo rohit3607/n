@@ -21,18 +21,25 @@ from bot import Bot
 from config import *
 from helper_func import *
 from database.database import *
+import os
+import re
+import zipfile
+import tempfile
+import asyncio
+import shutil
+from PIL import Image
+from pyrogram import Client, filters
+from pyrogram.types import Message
 
 # File auto-delete time in seconds (Set your desired time in seconds here)
 FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
 TUT_VID = f"{TUT_VID}"
 
-
-
 def natural_sort(file_list):
     """Sorts file names naturally (e.g., img1, img2, img10 instead of img1, img10, img2)."""
     return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
 
-@Bot.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
+@Client.on_message(filters.command("pdf") & filters.private & filters.user(ADMINS))
 async def pdf_handler(bot: Client, message: Message):
     await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
 
@@ -46,44 +53,53 @@ async def pdf_handler(bot: Client, message: Message):
         return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
 
     zip_name = os.path.splitext(zip_msg.document.file_name)[0]
-    zip_path = f"downloads/{zip_msg.document.file_name}"
-    extract_folder = f"downloads/{zip_name}_extracted"
 
-    await zip_msg.download(zip_path)
+    # Use temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        zip_path = os.path.join(temp_dir, zip_msg.document.file_name)
+        extract_folder = os.path.join(temp_dir, f"{zip_name}_extracted")
+        pdf_path = os.path.join(temp_dir, f"{zip_name}.pdf")
 
-    try:
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_folder)
-    except zipfile.BadZipFile:
-        return await message.reply_text("❌ Invalid ZIP file.")
+        # Download ZIP file
+        await zip_msg.download(zip_path)
 
-    # Supported image formats
-    valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
+        # Extract ZIP file
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_folder)
+        except zipfile.BadZipFile:
+            return await message.reply_text("❌ Invalid ZIP file.")
 
-    # Get image files, sorted naturally
-    image_files = natural_sort([
-        os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
-        if f.lower().endswith(valid_extensions)
-    ])
+        # Supported image formats
+        valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
 
-    if not image_files:
-        return await message.reply_text("❌ No images found in the ZIP.")
+        # Get image files, sorted naturally
+        image_files = natural_sort([
+            os.path.join(extract_folder, f) for f in os.listdir(extract_folder)
+            if f.lower().endswith(valid_extensions)
+        ])
 
-    pdf_path = f"downloads/{zip_name}.pdf"
+        if not image_files:
+            return await message.reply_text("❌ No images found in the ZIP.")
 
-    try:
-        first_image = Image.open(image_files[0]).convert("RGB")
-        image_list = (Image.open(img).convert("RGB") for img in image_files[1:])  # Generator for memory efficiency
-        first_image.save(pdf_path, save_all=True, append_images=image_list)
-    except Exception as e:
-        return await message.reply_text(f"❌ Error converting to PDF: {e}")
+        # Convert images to PDF
+        try:
+            first_image = Image.open(image_files[0]).convert("RGB")
+            first_image.thumbnail((2000, 2000))  # Resize to reduce memory usage
 
-    await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
+            image_list = []
+            for img_path in image_files[1:]:
+                img = Image.open(img_path).convert("RGB")
+                img.thumbnail((2000, 2000))  # Resize
+                image_list.append(img)
 
-    # Cleanup
-    os.remove(zip_path)
-    os.remove(pdf_path)
-    shutil.rmtree(extract_folder, ignore_errors=True)
+            first_image.save(pdf_path, save_all=True, append_images=image_list)
+        except Exception as e:
+            return await message.reply_text(f"❌ Error converting to PDF: {e}")
+
+        # Upload PDF with delay to avoid Telegram API rate limits
+        await asyncio.sleep(2)  # Small delay
+        await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
