@@ -30,75 +30,77 @@ import shutil
 from PIL import Image
 from pyrogram import Client, filters
 from pyrogram.types import Message
+import os, re, zipfile, tempfile, asyncio
 
+def natural_sort(files):
+    return sorted(files, key=lambda f: [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', f)])
 
+def remove_duplicates(file_list):
+    """Keep base image (e.g., 1.jpg) and remove variants like 1t.jpg."""
+    base_map = {}
+    valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
 
+    for file in file_list:
+        name, ext = os.path.splitext(os.path.basename(file))
+        if ext.lower() not in valid_extensions:
+            continue
+        match = re.match(r"^(\d+)[a-zA-Z]?$", name)
+        if match:
+            base = match.group(1)
+            if base not in base_map or not name.endswith("t"):  # Prefer base over variant
+                base_map[base] = file
+    return list(base_map.values())
 
-
-def natural_sort2(file_list):
-    """Sorts file names naturally (e.g., img1, img2, img10 instead of img1, img10, img2)."""
-    return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
+def generate_pdf(image_files, output_path):
+    image_iter = (Image.open(f).convert("RGB") for f in image_files)
+    first = next(image_iter)
+    first.save(output_path, save_all=True, append_images=image_iter)
 
 @Client.on_message(filters.command("pdf2") & filters.private & filters.user(ADMINS))
 async def pdf2_handler(bot: Client, message: Message):
-    await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
+    await message.reply_text("📂 Send a ZIP containing images (30s timeout)...")
 
     try:
         zip_msg = await bot.listen(
-            message.chat.id, 
+            message.chat.id,
             filters.document & filters.create(lambda _, __, m: m.document and m.document.file_name.endswith(".zip")),
             timeout=30
         )
     except asyncio.TimeoutError:
-        return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
+        return await message.reply_text("⏰ Timeout: No ZIP received.")
 
     zip_name = os.path.splitext(zip_msg.document.file_name)[0]
 
     with tempfile.TemporaryDirectory() as temp_dir:
         zip_path = os.path.join(temp_dir, zip_msg.document.file_name)
-        extract_folder = os.path.join(temp_dir, f"{zip_name}_extracted")
+        extract_dir = os.path.join(temp_dir, f"{zip_name}_extracted")
         pdf_path = os.path.join(temp_dir, f"{zip_name}.pdf")
 
         await zip_msg.download(zip_path)
 
         try:
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                zip_ref.extractall(extract_folder)
+                zip_ref.extractall(extract_dir)
         except zipfile.BadZipFile:
             return await message.reply_text("❌ Invalid ZIP file.")
 
-        valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
-
-        # Get base filenames to eliminate duplicates (e.g., 1.jpg vs 1t.jpg)
-        base_files = {}
-        for f in os.listdir(extract_folder):
-            if f.lower().endswith(valid_extensions):
-                name, ext = os.path.splitext(f)
-                # Remove 't' or similar trailing characters to find base name
-                base_match = re.match(r'^(\d+)[a-zA-Z]?$', name)
-                if base_match:
-                    base = base_match.group(1)
-                    if base not in base_files or not f.endswith("t" + ext):
-                        base_files[base] = f
-
-        # Create sorted list of unique images
-        image_files = natural_sort2([
-            os.path.join(extract_folder, f) for f in base_files.values()
-        ])
+        all_files = [
+            os.path.join(extract_dir, f) for f in os.listdir(extract_dir)
+        ]
+        filtered_files = remove_duplicates(all_files)
+        image_files = natural_sort(filtered_files)
 
         if not image_files:
-            return await message.reply_text("❌ No valid images found in the ZIP after removing duplicates.")
+            return await message.reply_text("❌ No valid images found after removing duplicates.")
 
+        loop = asyncio.get_event_loop()
         try:
-            first_image = Image.open(image_files[0]).convert("RGB")
-            image_list = [Image.open(img).convert("RGB") for img in image_files[1:]]
-
-            first_image.save(pdf_path, save_all=True, append_images=image_list)
+            await loop.run_in_executor(None, generate_pdf, image_files, pdf_path)
         except Exception as e:
-            return await message.reply_text(f"❌ Error converting to PDF: {e}")
+            return await message.reply_text(f"❌ PDF creation failed: {e}")
 
         await asyncio.sleep(2)
-        await message.reply_document(pdf_path, caption=f"Here is your PDF (duplicates removed): {zip_name}.pdf 📄")
+        await message.reply_document(pdf_path, caption=f"Here is your PDF (no duplicates): {zip_name}.pdf 📄")
 
 
 def natural_sort(file_list):
