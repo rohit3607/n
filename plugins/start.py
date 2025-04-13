@@ -31,9 +31,7 @@ from PIL import Image
 from pyrogram import Client, filters
 from pyrogram.types import Message
 
-# File auto-delete time in seconds (Set your desired time in seconds here)
-FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
-TUT_VID = f"{TUT_VID}"
+
 
 
 
@@ -165,6 +163,10 @@ async def pdf_handler(bot: Client, message: Message):
         await asyncio.sleep(2)  # Small delay
         await message.reply_document(pdf_path, caption=f"Here is your PDF: {zip_name}.pdf 📄")
 
+
+# File auto-delete time in seconds (Set your desired time in seconds here)
+FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
+TUT_VID = f"{TUT_VID}"
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed1 & subscribed2 & subscribed3 & subscribed4)
 async def start_command(client: Client, message: Message):
