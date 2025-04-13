@@ -35,6 +35,74 @@ from pyrogram.types import Message
 FILE_AUTO_DELETE = TIME  # Example: 3600 seconds (1 hour)
 TUT_VID = f"{TUT_VID}"
 
+
+
+def natural_sort2(file_list):
+    """Sorts file names naturally (e.g., img1, img2, img10 instead of img1, img10, img2)."""
+    return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
+
+@Client.on_message(filters.command("pdf2") & filters.private & filters.user(ADMINS))
+async def pdf2_handler(bot: Client, message: Message):
+    await message.reply_text("📂 Please send a ZIP file containing images. You have 30 seconds.")
+
+    try:
+        zip_msg = await bot.listen(
+            message.chat.id, 
+            filters.document & filters.create(lambda _, __, m: m.document and m.document.file_name.endswith(".zip")),
+            timeout=30
+        )
+    except asyncio.TimeoutError:
+        return await message.reply_text("⏰ Timeout: No ZIP file received within 30 seconds.")
+
+    zip_name = os.path.splitext(zip_msg.document.file_name)[0]
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        zip_path = os.path.join(temp_dir, zip_msg.document.file_name)
+        extract_folder = os.path.join(temp_dir, f"{zip_name}_extracted")
+        pdf_path = os.path.join(temp_dir, f"{zip_name}.pdf")
+
+        await zip_msg.download(zip_path)
+
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_folder)
+        except zipfile.BadZipFile:
+            return await message.reply_text("❌ Invalid ZIP file.")
+
+        valid_extensions = (".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".img")
+
+        # Get base filenames to eliminate duplicates (e.g., 1.jpg vs 1t.jpg)
+        base_files = {}
+        for f in os.listdir(extract_folder):
+            if f.lower().endswith(valid_extensions):
+                name, ext = os.path.splitext(f)
+                # Remove 't' or similar trailing characters to find base name
+                base_match = re.match(r'^(\d+)[a-zA-Z]?$', name)
+                if base_match:
+                    base = base_match.group(1)
+                    if base not in base_files or not f.endswith("t" + ext):
+                        base_files[base] = f
+
+        # Create sorted list of unique images
+        image_files = natural_sort2([
+            os.path.join(extract_folder, f) for f in base_files.values()
+        ])
+
+        if not image_files:
+            return await message.reply_text("❌ No valid images found in the ZIP after removing duplicates.")
+
+        try:
+            first_image = Image.open(image_files[0]).convert("RGB")
+            image_list = [Image.open(img).convert("RGB") for img in image_files[1:]]
+
+            first_image.save(pdf_path, save_all=True, append_images=image_list)
+        except Exception as e:
+            return await message.reply_text(f"❌ Error converting to PDF: {e}")
+
+        await asyncio.sleep(2)
+        await message.reply_document(pdf_path, caption=f"Here is your PDF (duplicates removed): {zip_name}.pdf 📄")
+
+
 def natural_sort(file_list):
     """Sorts file names naturally (e.g., img1, img2, img10 instead of img1, img10, img2)."""
     return sorted(file_list, key=lambda f: [int(text) if text.isdigit() else text.lower() for text in re.split(r'(\d+)', f)])
